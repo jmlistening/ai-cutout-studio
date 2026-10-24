@@ -1,0 +1,24 @@
+# —— 本机凭证 / 环境 ——
+.env
+.env.*
+!.env.example
+
+# —— Python / 虚拟环境 ——
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# —— 运行产物 ——
+outputs/
+.tmp_sdk/
+*.log
+
+# —— 编辑器 / 系统 ——
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

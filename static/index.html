@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>抠图台 · AI MediaKit 智能抠图</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%23c23a2c'/%3E%3Ctext x='16' y='23' font-size='20' text-anchor='middle' fill='%23fff8ef' font-family='SimSun,serif'%3E%E6%8A%A0%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-seal" aria-hidden="true">抠</span>
+        <div class="brand-text">
+          <h1>抠图台</h1>
+          <p>AI MediaKit · 智能抠图</p>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button id="statusPill" class="status-pill" type="button" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="statusText">正在检查凭证</span>
+        </button>
+        <button id="settingsOpen" class="ghost-button" type="button">凭证设置</button>
+      </div>
+    </header>
+
+    <main class="workbench">
+      <aside class="panel queue-panel" aria-label="素材队列">
+        <div class="panel-head">
+          <h2>素材</h2>
+          <span class="panel-count" id="queueCount">0 张</span>
+        </div>
+
+        <button id="dropZone" class="drop-zone" type="button">
+          <svg class="drop-icon" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 21V6M10.5 11.5 16 6l5.5 5.5M7 21v4a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="drop-title">拖入图片，或点击选择</span>
+          <span class="drop-hint">JPG · PNG · BMP · WebP · GIF · 最大 30 MB</span>
+        </button>
+        <input id="fileInput" type="file" accept="image/jpeg,image/png,image/bmp,image/webp,image/gif" multiple hidden>
+
+        <ul id="queueList" class="queue-list"></ul>
+        <div class="queue-empty" id="queueEmpty">
+          <p>还没有素材。</p>
+          <p class="muted">可以一次拖入多张，逐张确认后再开始。</p>
+        </div>
+
+        <div class="panel-foot">
+          <button id="startAll" class="primary-button" type="button" disabled>全部抠图</button>
+          <button id="clearDone" class="text-button" type="button" disabled>清空已完成</button>
+        </div>
+      </aside>
+
+      <section class="panel stage-panel" aria-label="预览">
+        <div class="stage-head">
+          <div class="stage-heading">
+            <h2 id="stageTitle">预览</h2>
+            <p id="stageSub" class="muted">选中左侧素材后，在这里查看原图与抠图结果</p>
+          </div>
+          <div class="view-switch" id="viewSwitch" role="group" aria-label="预览方式">
+            <button type="button" data-view="compare" aria-pressed="true" disabled>对比</button>
+            <button type="button" data-view="result" aria-pressed="false" disabled>抠图</button>
+            <button type="button" data-view="source" aria-pressed="false" disabled>原图</button>
+          </div>
+        </div>
+
+        <div class="stage-body">
+          <div class="lightbox" id="lightbox">
+            <div class="stage-empty" id="stageEmpty">
+              <p class="empty-title">把图片放上裁切台</p>
+              <p class="empty-copy">上传后点「开始抠图」，得到透明底 PNG。对比模式下，左边是原图，右边是抠好的透明层。</p>
+              <button id="emptyPick" class="ghost-button" type="button">选择图片</button>
+            </div>
+
+            <div class="viewer" id="viewer" hidden>
+              <div class="viewer-frame" id="viewerFrame">
+                <div class="layer result-layer">
+                  <img id="resultImg" alt="抠图结果" draggable="false">
+                </div>
+                <div class="layer source-layer" id="sourceLayer">
+                  <img id="sourceImg" alt="原图" draggable="false">
+                </div>
+                <div class="cut" id="cut" role="slider" tabindex="0" aria-label="原图与抠图结果对比位置" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" hidden>
+                  <span class="cut-line"></span>
+                  <span class="cut-handle" aria-hidden="true">
+                    <svg viewBox="0 0 20 20"><path d="M8 6 4 10l4 4M12 6l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </span>
+                </div>
+                <span class="viewer-tag tag-source" id="tagSource">原图</span>
+                <span class="viewer-tag tag-result" id="tagResult">抠图</span>
+                <div class="scan" id="scan" hidden></div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="stage-error" id="stageError" role="alert" hidden>
+            <p class="error-title">这张没有抠成功</p>
+            <p class="error-copy" id="stageErrorText"></p>
+            <button id="retryOne" class="ghost-button" type="button">重新抠图</button>
+          </div>
+
+          <div class="stage-meta" id="stageMeta" hidden>
+            <div class="meta-item"><span>尺寸</span><strong id="metaSize">—</strong></div>
+            <div class="meta-item"><span>文件</span><strong id="metaFile">—</strong></div>
+            <div class="meta-item"><span>耗时</span><strong id="metaElapsed">—</strong></div>
+            <div class="meta-item"><span>接口日志</span><strong id="metaRequest">—</strong></div>
+          </div>
+        </div>
+
+        <div class="stage-foot">
+          <p class="stage-note" id="stageNote">抠图结果会保存在本机 outputs 文件夹。</p>
+          <div class="stage-actions">
+            <button id="downloadOne" class="ghost-button" type="button" disabled>下载 PNG</button>
+            <button id="cutOne" class="primary-button" type="button" disabled>开始抠图</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel settings-panel" aria-label="输出设置">
+        <div class="panel-head">
+          <h2>输出设置</h2>
+        </div>
+        <div class="settings-scroll">
+          <fieldset class="field">
+            <legend>抠图场景</legend>
+            <div class="choice-row" role="radiogroup" aria-label="抠图场景">
+              <label class="choice"><input type="radio" name="scene" value="general" checked><span>通用</span></label>
+              <label class="choice"><input type="radio" name="scene" value="human"><span>人像</span></label>
+              <label class="choice"><input type="radio" name="scene" value="product"><span>商品</span></label>
+            </div>
+            <p class="hint">不确定主体选「通用」；证件照、人物选「人像」；电商商品选「商品」。</p>
+          </fieldset>
+
+          <fieldset class="field">
+            <legend>输出范围</legend>
+            <div class="stack">
+              <label class="choice-line">
+                <input type="radio" name="scope" value="original" checked>
+                <span><strong>保留原图尺寸</strong><small>主体之外全部透明，方便原位替换</small></span>
+              </label>
+              <label class="choice-line">
+                <input type="radio" name="scope" value="crop">
+                <span><strong>只保留主体</strong><small>裁掉四周空白，文件更小</small></span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="field">
+            <label class="field-label" for="nameInput">文件名</label>
+            <div class="name-field">
+              <input id="nameInput" type="text" maxlength="80" placeholder="选中素材后可改名" autocomplete="off" spellcheck="false" disabled>
+              <span class="name-suffix">.png</span>
+            </div>
+            <p class="hint">改名会用于单张下载和打包文件。</p>
+          </div>
+
+          <div class="field">
+            <span class="field-label">批量</span>
+            <button id="downloadZip" class="ghost-button wide" type="button" disabled>打包下载已完成的图片</button>
+            <p class="hint" id="zipHint">至少完成一张后可用。</p>
+          </div>
+
+          <div class="credential-card" id="credentialCard">
+            <p class="credential-title">接口凭证</p>
+            <p class="credential-state" id="credentialState">正在检查…</p>
+            <p class="hint">MediaKit API Key 只保存在本机 .env 文件；所有请求由本机后端转发。</p>
+            <button id="settingsOpen2" class="text-button" type="button">打开凭证设置</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+
+  <dialog id="settingsDialog" class="dialog">
+    <form id="settingsForm" novalidate>
+      <header class="dialog-head">
+        <div>
+          <h2>凭证设置</h2>
+          <p class="muted">使用火山引擎 AI MediaKit 的「图像背景移除」接口。</p>
+        </div>
+        <button id="settingsClose" class="icon-button" type="button" aria-label="关闭">×</button>
+      </header>
+      <div class="dialog-body">
+        <label class="field-label" for="keyInput">MediaKit API Key</label>
+        <input id="keyInput" class="text-input" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 AI MediaKit API Key">
+        <p class="hint">在 <a href="https://console.volcengine.com/imp/ai-mediakit/settings" target="_blank" rel="noreferrer">AI MediaKit 控制台的 API Key 页面</a>创建并复制 Key。首次使用可能需要开通 AI MediaKit / 图像工具；抠图按成功次数计费（约 1.38 元/千张，以控制台为准）。</p>
+        <p class="dialog-error" id="settingsError" hidden></p>
+      </div>
+      <footer class="dialog-foot">
+        <button id="settingsCancel" class="ghost-button" type="button">取消</button>
+        <button id="settingsSave" class="primary-button" type="submit">保存凭证</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
