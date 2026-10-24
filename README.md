@@ -1,7 +1,7 @@
 <div align="center">
 
 <h1>✂️ Cutout Studio · 抠图台</h1>
-<h3>本地优先的 AI 抠图工作台：批量、可控、可审计。</h3>
+<h3>本地优先的 AI 抠图工作台：批量、可控、可追溯。</h3>
 <p><strong>A local-first AI background-removal workbench powered by Volcengine AI MediaKit.</strong></p>
 <p>拖入图片，得到真正的 alpha 通道透明 PNG；凭证、原图和结果都留在你自己的机器上。</p>
 
@@ -9,7 +9,7 @@
 <img alt="Python 3.10–3.13" src="https://img.shields.io/badge/Python-3.10%E2%80%933.13-3776AB?logo=python&logoColor=white">
 <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white">
 <img alt="Volcengine AI MediaKit" src="https://img.shields.io/badge/Volcengine-AI%20MediaKit-1664FF">
-<img alt="Tests: 50 passed" src="https://img.shields.io/badge/Tests-50%20passed-0A9EDC?logo=pytest&logoColor=white">
+<img alt="Tests: 52 passed" src="https://img.shields.io/badge/Tests-52%20passed-0A9EDC?logo=pytest&logoColor=white">
 <img alt="Local-first" src="https://img.shields.io/badge/Local--first-127.0.0.1-2F6B58">
 <img alt="MIT License" src="https://img.shields.io/badge/License-MIT-2EA44F">
 <a href="https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml/badge.svg?branch=main"></a>
@@ -19,9 +19,9 @@
 
 ---
 
-**[项目概览](#-项目概览)** · **[功能一览](#-功能一览)** · **[系统架构](#-系统架构)** · **[工程难点](#-工程难点与解决方案)** · **[安全模型](#-安全与隐私模型)** · **[快速开始](#-快速开始)** · **[测试与 CI](#-测试与持续集成)** · **[工程设计](docs/ENGINEERING.md)** · **[安全策略](SECURITY.md)**
+**[项目概览](#-项目概览)** · **[功能一览](#-功能一览)** · **[系统架构](#-系统架构)** · **[工程难点](#-工程难点与解决方案)** · **[安全模型](#-安全与隐私模型)** · **[快速开始](#-快速开始)** · **[测试与 CI](#-测试与持续集成)** · **[工程设计](docs/ENGINEERING.md)** · **[更新记录](CHANGELOG.md)** · **[安全策略](SECURITY.md)**
 
-> **English TL;DR** — Cutout Studio is a local-first web workbench for AI background removal, built with FastAPI and the Volcengine AI MediaKit `remove-image-background` API. It covers the full media pipeline: input validation and normalization, presigned uploads, synchronous segmentation, alpha-PNG post-processing, a serial batch queue, a comparison slider and ZIP export. The API key never reaches the browser; the server binds to `127.0.0.1`, rejects cross-origin writes and sanitizes every user-controlled filename. 50 pytest tests cover the HTTP API, image pipeline, upstream error mapping and the frontend/HTML contract. MIT licensed.
+> **English TL;DR** — Cutout Studio is a local-first web workbench for AI background removal, built with FastAPI and the Volcengine AI MediaKit `remove-image-background` API. It covers the full media pipeline: input validation and normalization, presigned uploads, synchronous segmentation, alpha-PNG post-processing, a serial batch queue, a comparison slider and ZIP export. The API key never reaches the browser; the server binds to `127.0.0.1`, rejects cross-origin writes and sanitizes every user-controlled filename. 52 pytest tests cover the HTTP API, image pipeline, upstream error mapping and the frontend/HTML contract. MIT licensed.
 
 ## ✨ 项目概览
 
@@ -32,19 +32,19 @@
 它解决的不是“能不能抠”，而是“批量处理时能不能放心用”：
 
 - **真透明，不是近似图**：结果保留 alpha 通道，支持“保留原图尺寸”和“只保留主体”两种输出。
-- **本地优先**：服务只监听 `127.0.0.1`；API Key 只写进本机 `.env`，浏览器永远拿不到完整 Key。
+- **本地优先**：服务只监听 `127.0.0.1`；API Key 只写进本机 `.env`（或由进程环境变量提供），浏览器永远拿不到完整 Key。
 - **面向真实批量**：最多 50 张队列、逐张串行处理、单张重试、完成后 ZIP 打包。
 - **可解释的失败**：把上游的鉴权、未开通、欠费、限流、尺寸超限等错误映射成明确的中文提示，并保留 `request_id` / `task_id` 便于排查。
 - **零构建前端**：原生 HTML/CSS/JS，无 npm、无框架、无 CDN 依赖，启动即用。
-- **工程可验证**：50 个 pytest 测试 + GitHub Actions 多版本矩阵 + MIT License。
+- **工程可验证**：pytest + GitHub Actions 多版本矩阵 + MIT License。
 
 ### 为什么不是“豆包 API”？
 
 这是一个常见的误解。豆包 App 的抠图是产品内功能；开发者可调用的是火山引擎的媒体处理能力。AI MediaKit 的抠图接口按成功处理次数计费（官方计费页当前约 **1.38 元/千次**，即约 **0.00138 元/张**，以控制台账单为准），本项目在 README 和界面里都明确标注了这一点，不做“免费无限抠图”的暗示。
 
-## 📸 真实运行截图
+## 📸 界面截图
 
-> 截图取自项目在 Windows 本地运行的真实界面。演示素材是**程序生成的合成图片**（`docs/images/demo-*.png`），不包含任何个人照片。
+> 截图取自项目在 Windows 本地运行的真实界面。演示素材是**程序生成的合成图片**（`docs/images/demo-*.png`），凭证掩码为演示用假值（`demo-k…7890`），不包含任何个人照片或真实 Key。
 
 <p align="center">
   <img src="docs/images/ui-compare.png" alt="抠图台：原图与透明 PNG 的拖动对比界面" width="100%">
@@ -52,9 +52,9 @@
 
 <p align="center"><sub>拖动中线对比原图与抠图结果；右侧可切换场景、输出范围、文件名和批量下载。</sub></p>
 
-| 批量队列：3 张素材 | 透明结果：棋盘格预览 |
+| 批量队列：3 张已完成 | 透明结果：棋盘格预览 |
 | :---: | :---: |
-| <img src="docs/images/ui-queue.png" alt="批量素材队列界面" width="100%"> | <img src="docs/images/ui-result.png" alt="透明 PNG 结果预览界面" width="100%"> |
+| <img src="docs/images/ui-batch.png" alt="批量抠图完成后的素材队列界面" width="100%"> | <img src="docs/images/ui-result.png" alt="透明 PNG 结果预览界面" width="100%"> |
 
 <details>
 <summary><b>展开查看：空状态与凭证设置</b></summary>
@@ -93,22 +93,22 @@
 | 测试 | **pytest + httpx.MockTransport** | 全链路 mock，不依赖真实 Key 与外网 |
 | CI | **GitHub Actions** | Ubuntu / Windows × Python 3.10–3.13 矩阵 |
 
-## 🏗️ 系统架构
+## 🧭 系统架构
 
 项目刻意保持**单进程、无数据库、零构建**：图片是短生命周期产物，用文件系统保存即可；没有账号体系，也就不需要会话与迁移。
 
 ```mermaid
 flowchart LR
-    B["浏览器<br/>拖拽 / 粘贴 / 队列"] -->|multipart + X-Cutout-Client| A["FastAPI<br/>app.py"]
+    B["浏览器<br/>拖拽 / 粘贴 / 队列"] -->|multipart| A["FastAPI<br/>app.py"]
     A -->|CPU 密集操作| T["线程池<br/>run_in_threadpool"]
     T --> U["image_utils<br/>校验 · EXIF · 缩放 · 编码"]
     A --> C["mediakit_client<br/>四步调用链"]
     C -->|1 申请上传地址| M["火山引擎<br/>AI MediaKit"]
     C -->|2 PUT 预签名地址| S["对象存储"]
-    C -->|3 remove-image-background| M
+    C -->|3 智能抠图| M
     C -->|4 下载结果| S
-    A -->|RGBA 归一化 / alpha 裁剪| O["outputs/*.png"]
-    A -->|JSON: id / url / 元数据| B
+    A -->|alpha 归一化| O["outputs/*.png"]
+    A -->|JSON 元数据| B
 ```
 
 **一次抠图请求的完整时序：**
@@ -147,7 +147,7 @@ ai-cutout-studio/
 │   ├── index.html              # 工作台结构
 │   ├── app.js                  # 队列状态机、上传、对比滑块、导出
 │   └── style.css               # 纸张 / 裁切台视觉系统
-├── tests/                      # 50 个 pytest 测试
+├── tests/                      # 52 个 pytest 测试
 │   ├── test_api.py             # HTTP 路由与安全边界
 │   ├── test_mediakit.py        # MockTransport 全链路
 │   ├── test_image_utils.py     # 图像归一化边界
@@ -160,6 +160,7 @@ ai-cutout-studio/
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── 启动.bat                     # Windows 一键启动
+├── CHANGELOG.md
 ├── SECURITY.md
 └── LICENSE
 ```
@@ -184,7 +185,7 @@ MediaKit 的抠图接口不接受直接上传的文件流，而是要求：
 - 上传对象存储时**不能**带 MediaKit 的 `Authorization`，只带预签名头；这个边界在测试里被显式断言。
 - 每一步的超时、网络错误、HTTP 错误和业务错误都映射成不同的 `MediaKitError` code。
 
-**取舍：** 同步接口意味着单张处理时间受上游影响（本项目默认超时 180 秒）。没有做异步任务队列，因为本地单用户场景下，串行 + 明确进度比引入 Redis/Celery 更可靠。
+**边界：** 同步接口意味着单张处理时间受上游影响（本项目默认超时 180 秒）。没有做异步任务队列，因为本地单用户场景下，串行 + 明确进度比引入 Redis/Celery 更可靠。
 
 ### 02 · 上传前的图像归一化：让“能抠”变成“稳定能抠”
 
@@ -201,7 +202,7 @@ MediaKit 的抠图接口不接受直接上传的文件流，而是要求：
 | 兜底缩放 | 仍超限则按 0.85 迭代缩小 | 极端高熵图片也能收敛 |
 | 快速通道 | 未旋转、未缩放、格式已知、≤ 28 MB 时原样发送 | 大多数图片零重编码，节省 CPU 和时间 |
 
-**取舍：** 这是“尽量不改变原图”与“保证上游一定收得下”之间的折中。透明 PNG 始终保留 alpha；不透明图才允许转 JPEG。
+**权衡：** 这是“尽量不改变原图”与“保证上游一定收得下”之间的折中。透明 PNG 始终保留 alpha；不透明图才允许转 JPEG。
 
 ### 03 · 结果后处理：alpha 通道才是抠图的“真值”
 
@@ -215,7 +216,7 @@ if bbox:
 
 一个容易忽略的细节：**通用场景不传 `need_crop_background`**。该参数只对人像/商品生效；通用场景传了可能触发参数校验问题，所以本项目对通用场景改为本地 alpha 裁剪兜底。这样既保持上游请求干净，又保证“只保留主体”的语义一致。
 
-**取舍：** 本地裁剪基于完全透明的像素边界，不做羽化或语义分割；对于半透明边缘，包围盒可能略大于视觉主体。
+**边界：** 本地裁剪基于完全透明的像素边界，不做羽化或语义分割；对于半透明边缘，包围盒可能略大于视觉主体。
 
 ### 04 · 失败可解释：把上游错误翻译成用户能行动的信息
 
@@ -232,6 +233,7 @@ if bbox:
 | `MEDIAKIT_RATE_LIMIT` | 429 | 请求太频繁，稍后再试 |
 | `MEDIAKIT_BAD_IMAGE` | 422 | 图片尺寸或体积超限 |
 | `MEDIAKIT_TIMEOUT` | 504 | 上游超时 |
+| 本地空白结果校验 | 502 | 上游返回全透明图片，结果不写入 `outputs/` |
 | 其他上游错误 | 502 | 抠图服务返回错误 |
 
 同时保留 `request_id` 与 `task_id`，在界面的“接口日志”里展示，方便对照火山引擎控制台排查。
@@ -261,13 +263,13 @@ if bbox:
 - Blob URL 生命周期：移除素材、清空队列、页面卸载时调用 `revokeObjectURL`，避免内存泄漏；
 - 参数持久化：只把 `scene` / `scope` 存进 `localStorage`，不存图片、不存 Key。
 
-**取舍：** 没有引入 React/Vue，是因为这个界面只有一个页面、一个队列和三种视图；零构建带来的启动速度和可审计性，比组件化收益更大。
+**权衡：** 没有引入 React/Vue，是因为这个界面只有一个页面、一个队列和三种视图；零构建带来的启动速度和依赖可控性，比组件化收益更大。
 
 ## 🔒 安全与隐私模型
 
 | 资产 / 威胁 | 处理方式 |
 | --- | --- |
-| MediaKit API Key | 只保存在本机 `.env`；后端返回给浏览器的只有掩码（如 `demo-••••••••`） |
+| MediaKit API Key | 只保存在本机 `.env`（也可用环境变量覆盖）；后端返回给浏览器的只有掩码（如 `demo-k…7890`） |
 | 浏览器窃取 Key | 没有任何接口返回完整 Key；设置接口只接受写入，不回读 |
 | 恶意网页跨站调用 | 仅监听 `127.0.0.1`；Origin 白名单；`X-Cutout-Client` 自定义头 |
 | 路径穿越 | 结果 ID 必须是 32 位十六进制；ZIP 只允许已存在的输出文件 |
@@ -376,11 +378,11 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-当前 **50 个测试全部通过**（Python 3.12.5 本地验证），覆盖：
+当前 **52 个测试全部通过**（Python 3.12.5 本地验证），覆盖：
 
 - **HTTP 层**：页面、状态、凭证保存、跨站拒绝、路径穿越、ZIP 去重、错误状态映射；
 - **上游链路**：用 `httpx.MockTransport` 模拟申请上传地址 → PUT → 抠图 → 下载的完整四步，断言请求顺序、鉴权头和 body；
-- **图像管线**：EXIF 旋转、GIF 首帧、透明/不透明编码、场景限缩、alpha 裁剪、垃圾数据拒绝；
+- **图像管线**：EXIF 旋转、GIF 首帧、透明/不透明编码、场景限缩、alpha 裁剪、空白结果拒绝、垃圾数据拒绝；
 - **配置层**：UTF-8 BOM、GBK、环境变量覆盖、原子保存、Key 掩码；
 - **前端契约**：`app.js` 引用的元素 ID 必须存在于 HTML、静态资源必须存在、三种视图必须齐全、前端文件不得含裸控制字符。
 
@@ -392,6 +394,18 @@ python -m pytest -q
 
 生成脚本没有提交到仓库——这些图片只作为静态演示资产，避免把一次性截图工具混入运行时依赖。
 
+### 一次真实冒烟测试
+
+2026-10-24 在 Windows 11 / Python 3.12.5 上，用这 3 张合成图各调用一次真实 MediaKit 接口（约 0.004 元）：
+
+| 素材 | 场景 | 耗时 | 输出 |
+| --- | --- | ---: | --- |
+| `demo-product.png` | `product` | 3.87 s | 1200 × 900 · 27.4 KB |
+| `demo-portrait.png` | `general` | 3.39 s | 1200 × 900 · 20.2 KB |
+| `demo-common.png` | `general` | 3.55 s | 1200 × 900 · 22.2 KB |
+
+> 这是单机、单次观测，不构成性能基准；延迟取决于网络、图片尺寸和上游排队情况。合成人物剪影使用 `general` 场景，真实人像素材应使用 `human` 场景。
+
 ## ⚠️ 已知边界与取舍
 
 - **同步接口**：单张处理受上游延迟影响；没有异步任务队列、断点续传或后台队列。
@@ -401,6 +415,8 @@ python -m pytest -q
 - **文件名清洗是有损的**：非法字符会被删除，而不是转义；极长名称会截断到 80 字符。
 - **裁剪基于 alpha 包围盒**：不做羽化、不做语义主体检测；半透明边缘可能让包围盒略大。
 - **成本与配额由上游决定**：计费、免费额度、限流策略以火山引擎控制台为准，本项目不做保证。
+- **不做自动重试**：失败后由用户手动重试；每次重试都会重新调用上游，可能重复计费。这样做是为了避免在余额不足或参数错误时产生不可控的重复扣费。
+- **空白结果会被拒绝**：上游返回全透明图片时以 502 失败返回，不写入 `outputs/`，避免把“识别失败”当成成功结果。
 
 ## 🗺️ Roadmap
 

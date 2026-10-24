@@ -197,6 +197,20 @@ def test_cutout_rejects_bad_image(client, configured, fake_cutout):
     assert response.json()["error"]["code"] == "IMAGE_INVALID"
 
 
+def test_cutout_rejects_blank_upstream_result(client, configured, monkeypatch):
+    async def blank(*args, **kwargs):
+        image = Image.new("RGBA", (60, 40), (0, 0, 0, 0))
+        buffer = io.BytesIO()
+        image.save(buffer, "PNG")
+        return MediaKitResult(image_bytes=buffer.getvalue())
+
+    monkeypatch.setattr(app_module, "segment_image", blank)
+    response = post_cutout(client)
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "UPSTREAM_BAD_IMAGE"
+    assert not list(app_module.OUTPUT_DIR.glob("*.png"))
+
+
 def test_mediakit_error_http_status_mapping(client, configured, monkeypatch):
     async def raise_auth(*args, **kwargs):
         raise MediaKitError("key bad", code="MEDIAKIT_AUTH", status_code=403)

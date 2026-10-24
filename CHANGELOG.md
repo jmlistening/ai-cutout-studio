@@ -1,0 +1,27 @@
+# Changelog
+
+本项目遵循 [Semantic Versioning](https://semver.org/)。日期使用 YYYY-MM-DD。
+
+## 1.2.0 — 2026-10-24
+
+首次公开发布。
+
+### Added
+
+- 本地优先的 FastAPI 工作台：拖拽 / 粘贴上传、批量队列、三视图对比、单张与 ZIP 下载。
+- 火山引擎 AI MediaKit 四步调用链：申请上传地址 → 预签名 PUT → 同步抠图 → 下载结果。
+- 上传前图像归一化：EXIF 方向、GIF 首帧、场景限缩、迭代压缩、60 MP 解码保护。
+- 结果后处理：统一 RGBA PNG、按 alpha 包围盒裁剪、空白结果拒绝。
+- 通用 / 人像 / 商品三种场景；保留原图尺寸或只保留主体。
+- 本地安全模型：`127.0.0.1` 绑定、Origin 校验、`X-Cutout-Client` 头、32 位十六进制文件 ID、文件名清洗与 ZIP 去重。
+- 凭证管理：`.env` 原子写入、Key 掩码、无需重启；支持环境变量覆盖。
+- 52 个 pytest 测试，覆盖 HTTP 层、上游全链路 mock、图像管线、配置与前端静态契约。
+- GitHub Actions：Ubuntu / Windows × Python 3.10–3.13 矩阵。
+- README 界面截图、Mermaid 架构图、工程设计说明、安全策略与 MIT License。
+
+### Known limitations
+
+- 同步接口，单张处理受上游延迟影响；没有异步任务队列。
+- 单机单用户，不适合直接暴露到公网。
+- 不做自动重试；手动重试会重新计费。
+- 结果只保存在本机 `outputs/`，不做加密、过期清理或数据库索引。
