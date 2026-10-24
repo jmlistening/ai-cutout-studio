@@ -223,10 +223,13 @@ def normalize_result_image(
     if img.mode != "RGBA":
         img = img.convert("RGBA")
 
+    # 全透明结果通常意味着上游识别失败；不要把它当成成功结果写进 outputs
+    alpha_bbox = img.getchannel("A").getbbox()
+    if alpha_bbox is None:
+        raise ImageInputError("抠图接口返回了空白结果，请换一张图片重试")
+
     if crop_subject:
-        bbox = img.getchannel("A").getbbox()
-        if bbox:
-            img = img.crop(bbox)
+        img = img.crop(alpha_bbox)
 
     buffer = io.BytesIO()
     img.save(buffer, format="PNG", optimize=True)

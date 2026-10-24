@@ -134,6 +134,15 @@ def test_normalize_result_can_crop_transparent_border():
     assert (full_w, full_h) == (100, 80)
 
 
+def test_normalize_result_rejects_blank_result():
+    image = Image.new("RGBA", (40, 30), (0, 0, 0, 0))
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+
+    with pytest.raises(ImageInputError):
+        normalize_result_image(buffer.getvalue())
+
+
 def test_normalize_result_rejects_garbage():
     with pytest.raises(ImageInputError):
         normalize_result_image(b"garbage")
