@@ -145,6 +145,30 @@
     return state.items.find((item) => item.localId === state.selectedId) || null;
   }
 
+  function isEditableTarget(target) {
+    if (!(target instanceof Element)) return false;
+    if (target.isContentEditable) return true;
+    return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+  }
+
+  function isSliderTarget(target) {
+    return target instanceof Element && Boolean(target.closest('[role="slider"]'));
+  }
+
+  function stepSelection(direction) {
+    const total = state.items.length;
+    if (!total) return;
+    const currentIndex = state.items.findIndex((item) => item.localId === state.selectedId);
+    if (total === 1 && currentIndex >= 0) return;
+    const nextIndex =
+      currentIndex < 0
+        ? direction > 0
+          ? 0
+          : total - 1
+        : (currentIndex + direction + total) % total;
+    selectItem(state.items[nextIndex].localId);
+  }
+
   function hasFiles(event) {
     const types = event.dataTransfer?.types;
     return Boolean(types && Array.from(types).includes("Files"));
@@ -826,7 +850,7 @@
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 5000);
-      toast(`已打包 ${done.length} 张图片`, "success");
+      toast(`已打包 ${done.length} 张图片，按分辨率分文件夹`, "success");
     } catch (error) {
       toast(error.message || "打包失败", "error");
     } finally {
@@ -874,7 +898,7 @@
     els.downloadZip.disabled = !done.length || state.busy;
     els.clearDone.disabled = !done.length || state.busy;
     els.zipHint.textContent = done.length
-      ? `已完成 ${done.length} 张，可打包下载。`
+      ? `已完成 ${done.length} 张，可打包下载（按分辨率分文件夹）。`
       : "至少完成一张后可用。";
 
     const hasResult = Boolean(item?.result);
@@ -1081,7 +1105,17 @@
           event.preventDefault();
           processItem(item);
         }
+        return;
       }
+
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (event.isComposing || els.settingsDialog.open) return;
+      if (isEditableTarget(event.target) || isSliderTarget(event.target)) return;
+      if (!state.items.length) return;
+
+      event.preventDefault();
+      stepSelection(event.key === "ArrowDown" ? 1 : -1);
     });
 
     window.addEventListener("beforeunload", () => {

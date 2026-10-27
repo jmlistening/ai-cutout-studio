@@ -54,3 +54,13 @@ def test_scene_options_and_mediakit_key_field():
     assert 'name="scene"' in html
     assert 'id="keyInput"' in html
     assert "akInput" not in js and "refine" not in js
+
+
+def test_queue_arrow_key_navigation_contract():
+    js = JS.read_text(encoding="utf-8")
+    assert '"ArrowDown"' in js and '"ArrowUp"' in js
+    assert "stepSelection(" in js
+    assert "isEditableTarget(" in js
+    assert "isSliderTarget(" in js
+    assert 'closest(\'[role="slider"]\')' in js
+    assert "els.settingsDialog.open" in js

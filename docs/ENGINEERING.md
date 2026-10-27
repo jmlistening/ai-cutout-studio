@@ -1,6 +1,6 @@
 # 工程设计说明
 
-本文档补充 README 没有展开的模块边界、请求生命周期、失败处理、测试策略和设计取舍。所有描述以当前版本 `1.2.0` 的代码为准。
+本文档补充 README 没有展开的模块边界、请求生命周期、失败处理、测试策略和设计取舍。所有描述以当前版本 `1.3.0` 的代码为准。
 
 ## 1. 设计目标与非目标
 
@@ -72,7 +72,8 @@
 ### 3.3 `POST /api/zip`
 
 - 先校验所有 ID，再统计总大小；任何一项不存在或超过 500 MB 都整体拒绝，避免“下载到一半才失败”。
-- ZIP 内文件名走同一套 `sanitize_filename`，并用 `casefold()` 做大小写不敏感去重。
+- 打包时用 Pillow 读取每张成品 PNG 的实际宽高，按 `{width}x{height}/` 分文件夹；读不出尺寸或触发解压炸弹保护时归入 `未知尺寸/`。
+- 文件名走同一套 `sanitize_filename`，并用 `casefold()` 在**同一分辨率文件夹内**做大小写不敏感去重。
 - 使用 `ZIP_DEFLATED`；PNG 本身压缩率有限，但能减少元数据与重复文件名的开销。
 
 ### 3.4 `POST /api/settings`
@@ -153,6 +154,7 @@ if alpha_bbox is None:
 - 批量模式是 `for ... of` 串行循环，不是 `Promise.all`；这是为了降低上游限流概率，并让进度条真实反映“第几张”。
 - 单张失败只标记该项，不中断整个队列；`state.configured` 变成 false 时才停止批处理并打开凭证弹窗。
 - `renderAll()` 是唯一的状态渲染入口；所有事件处理器只修改 `state`，再调用渲染，避免 DOM 状态与数据状态分叉。
+- 键盘 `↑` / `↓` 按 `state.items` 顺序循环切换选中项；输入框、单选按钮和凭证弹窗保留原生方向键行为。
 - 素材的本地预览使用 `URL.createObjectURL(file)`；删除素材、清空队列、页面卸载时都会 `revokeObjectURL`。
 
 ## 7. 安全清单
@@ -165,7 +167,7 @@ if alpha_bbox is None:
 | 上传体积粗检 | `_local_only_guard` | 代码审查 |
 | 文件 ID 白名单 | `_output_path` | `test_file_route_blocks_path_traversal` |
 | 文件名清洗 | `sanitize_filename` | `test_sanitize_filename_hardening` |
-| ZIP 名称去重 | `_build_zip` | `test_zip_download_dedupes_names` |
+| ZIP 名称去重 | `_build_zip` | `test_zip_download_dedupes_names`、`test_zip_dedupes_names_within_each_resolution_folder` |
 | Key 不回传 | `_status_payload` / `masked_key` | `test_status_without_credentials`、`test_settings_saved_and_key_masked` |
 | Key 原子写入 | `Settings.save_api_key` | `test_save_api_key` |
 | 解码炸弹 | `prepare_upload` 头部检查 | `test_rejects_too_many_pixels` |
@@ -196,6 +198,7 @@ if alpha_bbox is None:
 - `app.js` 里 `getElementById("...")` 引用的每个 ID 都存在于 HTML；
 - HTML 引用的 `/static/*` 文件都存在；
 - 三种视图 `compare` / `result` / `source` 都存在；
+- 素材队列的 `↑` / `↓` 切换逻辑与输入框/弹窗保护存在；
 - CSS 对 `[hidden]` 有强制隐藏规则；
 - 前端文件不含裸控制字符。
 
@@ -277,6 +280,6 @@ if alpha_bbox is None:
 - 本地结果索引、缩略图、按时间清理。
 - 可插拔的上游适配器（保持 `/api/cutout` 契约不变）。
 - Docker / 反向代理示例，并配套认证与限流说明。
-- 前端可访问性与键盘操作补全（当前对比滑块已支持方向键）。
+- 前端可访问性与键盘操作补全（当前对比滑块与素材队列已支持方向键）。
 
 任何新增能力都应先补测试，再更新 README 的“已实现”与“已知边界”，避免把规划写成现状。
