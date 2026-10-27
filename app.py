@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import quote, urlparse
 
 import uvicorn
+from PIL import Image
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -301,19 +302,32 @@ def _write_output(file_id: str, data: bytes) -> Path:
     return path
 
 
+def _image_size(path: Path) -> tuple[int, int] | None:
+    """读取成品 PNG 的实际宽高；读不出来时返回 None。"""
+    try:
+        with Image.open(path) as image:
+            return image.size
+    except (OSError, ValueError, Image.DecompressionBombError):
+        return None
+
+
 def _build_zip(entries: list[tuple[ZipItem, Path]]) -> bytes:
-    used_names: set[str] = set()
+    # 按分辨率分文件夹，同名去重只在各自文件夹内进行
+    used_names: dict[str, set[str]] = {}
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for item, path in entries:
+            size = _image_size(path)
+            folder = f"{size[0]}x{size[1]}" if size else "未知尺寸"
             base = sanitize_filename(item.name or path.stem)
             filename = f"{base}.png"
+            used = used_names.setdefault(folder, set())
             counter = 2
-            while filename.casefold() in used_names:
+            while filename.casefold() in used:
                 filename = f"{base} ({counter}).png"
                 counter += 1
-            used_names.add(filename.casefold())
-            archive.write(path, arcname=filename)
+            used.add(filename.casefold())
+            archive.write(path, arcname=f"{folder}/{filename}")
     return buffer.getvalue()
 
 
