@@ -12,7 +12,6 @@
 <img alt="Tests: 58 passed" src="https://img.shields.io/badge/Tests-58%20passed-0A9EDC?logo=pytest&logoColor=white">
 <img alt="Local-first" src="https://img.shields.io/badge/Local--first-127.0.0.1-2F6B58">
 <img alt="MIT License" src="https://img.shields.io/badge/License-MIT-2EA44F">
-<a href="https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml/badge.svg?branch=main"></a>
 </p>
 
 </div>
@@ -386,7 +385,7 @@ python -m pytest -q
 - **配置层**：UTF-8 BOM、GBK、环境变量覆盖、原子保存、Key 掩码；
 - **前端契约**：`app.js` 引用的元素 ID 必须存在于 HTML、静态资源必须存在、三种视图必须齐全、队列 `↑` / `↓` 切换逻辑存在、前端文件不得含裸控制字符。
 
-仓库附带 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，在 push 和 pull request 时对 **Ubuntu / Windows × Python 3.10–3.13** 运行测试。徽章以 GitHub Actions 的实际结果为准。
+仓库附带 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，在 push 和 pull request 时对 **Ubuntu / Windows × Python 3.10–3.13** 运行测试。实际结果见 [GitHub Actions](https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml)。
 
 ## 🧪 可复现的演示数据
 
