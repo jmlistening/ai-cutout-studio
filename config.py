@@ -13,7 +13,7 @@ OUTPUT_DIR = BASE_DIR / "outputs"
 ENV_PATH = BASE_DIR / ".env"
 
 APP_NAME = "抠图台"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 
 DEFAULT_ENDPOINT = "https://mediakit.cn-beijing.volces.com"
 DEFAULT_PORT = 8765

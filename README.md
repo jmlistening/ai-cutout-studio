@@ -3,7 +3,7 @@
 <h1>✂️ Cutout Studio · 抠图台</h1>
 <h3>本地优先的 AI 抠图工作台：批量、可控、可追溯。</h3>
 <p><strong>A local-first AI background-removal workbench powered by Volcengine AI MediaKit.</strong></p>
-<p>拖入图片，得到真正的 alpha 通道透明 PNG；凭证、原图和结果都留在你自己的机器上。</p>
+<p>拖入图片，得到真正的 alpha 通道透明 PNG；凭证和结果留在本机，图片会发送到火山引擎 AI MediaKit 处理。</p>
 
 <p>
 <img alt="Python 3.10–3.13" src="https://img.shields.io/badge/Python-3.10%E2%80%933.13-3776AB?logo=python&logoColor=white">
@@ -20,7 +20,7 @@
 
 **[项目概览](#-项目概览)** · **[功能一览](#-功能一览)** · **[系统架构](#-系统架构)** · **[工程难点](#-工程难点与解决方案)** · **[安全模型](#-安全与隐私模型)** · **[快速开始](#-快速开始)** · **[测试与 CI](#-测试与持续集成)** · **[工程设计](docs/ENGINEERING.md)** · **[更新记录](CHANGELOG.md)** · **[安全策略](SECURITY.md)**
 
-> **English TL;DR** — Cutout Studio is a local-first web workbench for AI background removal, built with FastAPI and the Volcengine AI MediaKit `remove-image-background` API. It covers the full media pipeline: input validation and normalization, presigned uploads, synchronous segmentation, alpha-PNG post-processing, a serial batch queue, a comparison slider and resolution-grouped ZIP export. The API key never reaches the browser; the server binds to `127.0.0.1`, rejects cross-origin writes and sanitizes every user-controlled filename. 58 pytest tests cover the HTTP API, image pipeline, upstream error mapping and the frontend/HTML contract. MIT licensed.
+> **English TL;DR** — Cutout Studio is a local-first web workbench for AI background removal, built with FastAPI and the Volcengine AI MediaKit `remove-image-background` API. It covers the full media pipeline: input validation and normalization, presigned uploads, synchronous segmentation, alpha-PNG post-processing, a serial batch queue, a comparison slider and resolution-grouped ZIP export. Images are uploaded to Volcengine AI MediaKit for processing; the API key never reaches the browser, the server binds to `127.0.0.1`, rejects cross-origin writes and sanitizes every user-controlled filename. 58 pytest tests cover the HTTP API, image pipeline, upstream error mapping and the frontend/HTML contract. MIT licensed.
 
 ## ✨ 项目概览
 
@@ -31,7 +31,7 @@
 它解决的不是“能不能抠”，而是“批量处理时能不能放心用”：
 
 - **真透明，不是近似图**：结果保留 alpha 通道，支持“保留原图尺寸”和“只保留主体”两种输出。
-- **本地优先**：服务只监听 `127.0.0.1`；API Key 只写进本机 `.env`（或由进程环境变量提供），浏览器永远拿不到完整 Key。
+- **本地优先**：服务只监听 `127.0.0.1`；API Key 只写进本机 `.env`（或由进程环境变量提供），浏览器永远拿不到完整 Key；抠图时图片会发送到火山引擎 AI MediaKit 处理。
 - **面向真实批量**：最多 50 张队列、逐张串行处理、单张重试、`↑` / `↓` 顺序切换素材、完成后按分辨率分文件夹打包。
 - **可解释的失败**：把上游的鉴权、未开通、欠费、限流、尺寸超限等错误映射成明确的中文提示，并保留 `request_id` / `task_id` 便于排查。
 - **零构建前端**：原生 HTML/CSS/JS，无 npm、无框架、无 CDN 依赖，启动即用。
@@ -269,6 +269,7 @@ if bbox:
 | 资产 / 威胁 | 处理方式 |
 | --- | --- |
 | MediaKit API Key | 只保存在本机 `.env`（也可用环境变量覆盖）；后端返回给浏览器的只有掩码（如 `demo-k…7890`） |
+| 图片上传 | 抠图必须联网；图片会经本机后端发送到火山引擎 AI MediaKit，本机只保留你选择的原文件和 `outputs/` 结果 |
 | 浏览器窃取 Key | 没有任何接口返回完整 Key；设置接口只接受写入，不回读 |
 | 恶意网页跨站调用 | 仅监听 `127.0.0.1`；Origin 白名单；`X-Cutout-Client` 自定义头 |
 | 路径穿越 | 结果 ID 必须是 32 位十六进制；ZIP 只允许已存在的输出文件 |
@@ -410,6 +411,7 @@ python -m pytest -q
 - **同步接口**：单张处理受上游延迟影响；没有异步任务队列、断点续传或后台队列。
 - **单机单用户**：没有账号体系、并发隔离和配额管理；不适合直接暴露到公网。
 - **结果只存在本机**：`outputs/` 是普通文件，不做加密、过期清理或数据库索引。
+- **必须联网且图片会上传**：抠图调用火山引擎 AI MediaKit，图片会离开本机；当前版本没有本地离线模型。
 - **只支持浏览器可预览的格式**：界面接收 JPG / PNG / BMP / WebP / GIF；MediaKit 虽支持 TIFF / HEIC，但浏览器无法可靠预览，所以没有放进上传入口。
 - **文件名清洗是有损的**：非法字符会被删除，而不是转义；极长名称会截断到 80 字符。
 - **裁剪基于 alpha 包围盒**：不做羽化、不做语义主体检测；半透明边缘可能让包围盒略大。
