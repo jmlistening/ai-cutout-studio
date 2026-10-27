@@ -9,7 +9,7 @@
 <img alt="Python 3.10–3.13" src="https://img.shields.io/badge/Python-3.10%E2%80%933.13-3776AB?logo=python&logoColor=white">
 <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white">
 <img alt="Volcengine AI MediaKit" src="https://img.shields.io/badge/Volcengine-AI%20MediaKit-1664FF">
-<img alt="Tests: 52 passed" src="https://img.shields.io/badge/Tests-52%20passed-0A9EDC?logo=pytest&logoColor=white">
+<img alt="Tests: 58 passed" src="https://img.shields.io/badge/Tests-58%20passed-0A9EDC?logo=pytest&logoColor=white">
 <img alt="Local-first" src="https://img.shields.io/badge/Local--first-127.0.0.1-2F6B58">
 <img alt="MIT License" src="https://img.shields.io/badge/License-MIT-2EA44F">
 <a href="https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml/badge.svg?branch=main"></a>
@@ -21,7 +21,7 @@
 
 **[项目概览](#-项目概览)** · **[功能一览](#-功能一览)** · **[系统架构](#-系统架构)** · **[工程难点](#-工程难点与解决方案)** · **[安全模型](#-安全与隐私模型)** · **[快速开始](#-快速开始)** · **[测试与 CI](#-测试与持续集成)** · **[工程设计](docs/ENGINEERING.md)** · **[更新记录](CHANGELOG.md)** · **[安全策略](SECURITY.md)**
 
-> **English TL;DR** — Cutout Studio is a local-first web workbench for AI background removal, built with FastAPI and the Volcengine AI MediaKit `remove-image-background` API. It covers the full media pipeline: input validation and normalization, presigned uploads, synchronous segmentation, alpha-PNG post-processing, a serial batch queue, a comparison slider and ZIP export. The API key never reaches the browser; the server binds to `127.0.0.1`, rejects cross-origin writes and sanitizes every user-controlled filename. 52 pytest tests cover the HTTP API, image pipeline, upstream error mapping and the frontend/HTML contract. MIT licensed.
+> **English TL;DR** — Cutout Studio is a local-first web workbench for AI background removal, built with FastAPI and the Volcengine AI MediaKit `remove-image-background` API. It covers the full media pipeline: input validation and normalization, presigned uploads, synchronous segmentation, alpha-PNG post-processing, a serial batch queue, a comparison slider and resolution-grouped ZIP export. The API key never reaches the browser; the server binds to `127.0.0.1`, rejects cross-origin writes and sanitizes every user-controlled filename. 58 pytest tests cover the HTTP API, image pipeline, upstream error mapping and the frontend/HTML contract. MIT licensed.
 
 ## ✨ 项目概览
 
@@ -33,7 +33,7 @@
 
 - **真透明，不是近似图**：结果保留 alpha 通道，支持“保留原图尺寸”和“只保留主体”两种输出。
 - **本地优先**：服务只监听 `127.0.0.1`；API Key 只写进本机 `.env`（或由进程环境变量提供），浏览器永远拿不到完整 Key。
-- **面向真实批量**：最多 50 张队列、逐张串行处理、单张重试、完成后 ZIP 打包。
+- **面向真实批量**：最多 50 张队列、逐张串行处理、单张重试、`↑` / `↓` 顺序切换素材、完成后按分辨率分文件夹打包。
 - **可解释的失败**：把上游的鉴权、未开通、欠费、限流、尺寸超限等错误映射成明确的中文提示，并保留 `request_id` / `task_id` 便于排查。
 - **零构建前端**：原生 HTML/CSS/JS，无 npm、无框架、无 CDN 依赖，启动即用。
 - **工程可验证**：pytest + GitHub Actions 多版本矩阵 + MIT License。
@@ -76,9 +76,9 @@
 | **智能抠图** | 通用 / 人像 / 商品三种场景；保留原图尺寸或只保留主体 | 四步调用链：申请上传地址 → 预签名 PUT → 同步抠图 → 下载结果 |
 | **结果后处理** | 统一 RGBA PNG；按 alpha 边界裁掉透明边 | 通用场景的“只保留主体”由本地 `alpha.getbbox()` 兜底，不依赖上游参数 |
 | **预览对比** | 原图 / 抠图 / 对比三视图；鼠标拖动 + 键盘方向键控制对比线 | 双层叠放 + `clip-path`，指针事件与键盘事件共用同一套位置状态 |
-| **批量处理** | 全部抠图、逐张进度、失败单张重试、清空已完成 | 串行处理，降低上游限流风险；每张独立更新状态，不阻塞其他素材 |
+| **批量处理** | 全部抠图、逐张进度、失败单张重试、清空已完成；`↑` / `↓` 按队列顺序循环切换素材 | 串行处理，降低上游限流风险；每张独立更新状态，不阻塞其他素材；输入框、单选按钮、对比滑块与凭证弹窗保留原生方向键 |
 | **文件命名** | 选中即可改名；单张下载与 ZIP 都用自定义名 | 过滤路径分隔符、控制字符、Unicode 方向控制符、Windows 保留名；长度截断到 80 |
-| **导出** | 单张 PNG；ZIP 打包最多 100 张 / 500 MB | ZIP 内文件名大小写不敏感去重，冲突自动追加 `(2)` |
+| **导出** | 单张 PNG；ZIP 打包最多 100 张 / 500 MB | 按成品 PNG 实际分辨率分文件夹（如 `1920x1080/`）；同一文件夹内文件名大小写不敏感去重，冲突自动追加 `(2)` |
 | **凭证管理** | 网页内保存 Key，无需重启；状态与掩码实时显示 | `.env.tmp` + `os.replace` 原子写入；保存后清除进程环境变量覆盖 |
 | **本地安全** | 仅监听 `127.0.0.1`；拒绝跨站写请求；安全响应头 | Origin 校验 + 自定义请求头 + 文件 ID 正则 + `Content-Length` 上限 |
 
@@ -147,7 +147,7 @@ ai-cutout-studio/
 │   ├── index.html              # 工作台结构
 │   ├── app.js                  # 队列状态机、上传、对比滑块、导出
 │   └── style.css               # 纸张 / 裁切台视觉系统
-├── tests/                      # 52 个 pytest 测试
+├── tests/                      # 58 个 pytest 测试
 │   ├── test_api.py             # HTTP 路由与安全边界
 │   ├── test_mediakit.py        # MockTransport 全链路
 │   ├── test_image_utils.py     # 图像归一化边界
@@ -247,7 +247,7 @@ if bbox:
 - **自定义请求头**：`/api/cutout` 要求 `X-Cutout-Client: 1`，提高跨站表单伪造的成本。
 - **文件 ID 白名单**：结果文件只接受 32 位小写十六进制 ID，`/files/../../win.ini` 之类请求在正则层就被拒绝。
 - **文件名清洗**：去掉路径分隔符、控制字符、Unicode 方向控制符；处理 Windows 保留名（`CON`、`PRN`、`COM1` 等）；截断到 80 字符。
-- **ZIP 去重**：大小写不敏感比较，冲突时追加 `(2)`，避免覆盖。
+- **ZIP 去重**：同一分辨率文件夹内大小写不敏感比较，冲突时追加 `(2)`，避免覆盖；文件夹名只由图片实际宽高生成。
 - **解码保护**：先看头部像素数，再 `load()`，防止超大图占满内存。
 - **响应头**：`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options: DENY`。
 
@@ -290,7 +290,7 @@ if bbox:
 | `POST` | `/api/settings` | 保存 MediaKit API Key（原子写入 `.env`） |
 | `POST` | `/api/cutout` | 上传并抠图：`file`、`scene`、`output_mode`、`name` |
 | `GET` | `/files/{id}` | 预览结果；`?download=1&name=...` 触发下载 |
-| `POST` | `/api/zip` | 按 `[{id, name}]` 打包已完成结果 |
+| `POST` | `/api/zip` | 按 `[{id, name}]` 打包已完成结果，并按实际分辨率分文件夹 |
 
 `POST /api/cutout` 成功时返回：
 
@@ -357,8 +357,8 @@ MEDIAKIT_ENDPOINT=https://mediakit.cn-beijing.volces.com
 1. 拖入图片，或点击上传 / `Ctrl+V` 粘贴；
 2. 选择场景（通用 / 人像 / 商品）和输出范围；
 3. 点「开始抠图」或「全部抠图」；
-4. 拖动中线对比原图与结果，切换「对比 / 抠图 / 原图」；
-5. 「下载 PNG」导出单张，「打包下载已完成的图片」导出 ZIP。
+4. 拖动中线对比原图与结果，切换「对比 / 抠图 / 原图」；按 `↑` / `↓` 切换队列中的图片（含已完成）；
+5. 「下载 PNG」导出单张，「打包下载已完成的图片」导出按分辨率分文件夹的 ZIP。
 
 结果同时保存在本机 `outputs/`；清空队列不会删除已经生成的文件。
 
@@ -378,13 +378,13 @@ python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-当前 **52 个测试全部通过**（Python 3.12.5 本地验证），覆盖：
+当前 **58 个测试全部通过**（Python 3.12.5 本地验证），覆盖：
 
-- **HTTP 层**：页面、状态、凭证保存、跨站拒绝、路径穿越、ZIP 去重、错误状态映射；
+- **HTTP 层**：页面、状态、凭证保存、跨站拒绝、路径穿越、ZIP 分辨率分文件夹与去重、错误状态映射；
 - **上游链路**：用 `httpx.MockTransport` 模拟申请上传地址 → PUT → 抠图 → 下载的完整四步，断言请求顺序、鉴权头和 body；
 - **图像管线**：EXIF 旋转、GIF 首帧、透明/不透明编码、场景限缩、alpha 裁剪、空白结果拒绝、垃圾数据拒绝；
 - **配置层**：UTF-8 BOM、GBK、环境变量覆盖、原子保存、Key 掩码；
-- **前端契约**：`app.js` 引用的元素 ID 必须存在于 HTML、静态资源必须存在、三种视图必须齐全、前端文件不得含裸控制字符。
+- **前端契约**：`app.js` 引用的元素 ID 必须存在于 HTML、静态资源必须存在、三种视图必须齐全、队列 `↑` / `↓` 切换逻辑存在、前端文件不得含裸控制字符。
 
 仓库附带 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，在 push 和 pull request 时对 **Ubuntu / Windows × Python 3.10–3.13** 运行测试。徽章以 GitHub Actions 的实际结果为准。
 

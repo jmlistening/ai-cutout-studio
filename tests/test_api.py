@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import struct
+import zlib
 from zipfile import ZipFile
 
 import pytest
@@ -80,6 +82,23 @@ def image_bytes(size=(320, 240)) -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", size, (120, 80, 60)).save(buffer, "PNG")
     return buffer.getvalue()
+
+
+def write_result(size, file_id: str) -> str:
+    path = app_module.OUTPUT_DIR / f"{file_id}.png"
+    Image.new("RGBA", size, (200, 60, 40, 255)).save(path, "PNG")
+    return file_id
+
+
+def png_header_only(width: int, height: int) -> bytes:
+    """构造只有 IHDR/IEND 的 PNG，用来触发 Pillow 的解压炸弹检查。"""
+
+    def chunk(kind: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(kind + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", crc)
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IEND", b"")
 
 
 def post_cutout(client, **overrides):
@@ -275,8 +294,98 @@ def test_zip_download_dedupes_names(client, configured, fake_cutout):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/zip")
     with ZipFile(io.BytesIO(response.content)) as archive:
-        assert archive.namelist() == ["同一个名字.png", "同一个名字 (2).png"]
-        assert archive.read("同一个名字.png").startswith(b"\x89PNG")
+        assert archive.namelist() == [
+            "180x120/同一个名字.png",
+            "180x120/同一个名字 (2).png",
+        ]
+        assert archive.read("180x120/同一个名字.png").startswith(b"\x89PNG")
+
+
+def test_zip_groups_files_by_resolution(client):
+    ids = [
+        write_result((180, 120), "1" * 32),
+        write_result((320, 240), "2" * 32),
+        write_result((180, 120), "3" * 32),
+    ]
+    response = client.post(
+        "/api/zip",
+        json={
+            "items": [
+                {"id": ids[0], "name": "横图"},
+                {"id": ids[1], "name": "方图"},
+                {"id": ids[2], "name": "另一张"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == [
+            "180x120/横图.png",
+            "320x240/方图.png",
+            "180x120/另一张.png",
+        ]
+
+
+def test_zip_dedupes_names_within_each_resolution_folder(client):
+    ids = [
+        write_result((180, 120), "4" * 32),
+        write_result((320, 240), "5" * 32),
+        write_result((180, 120), "6" * 32),
+    ]
+    response = client.post(
+        "/api/zip",
+        json={
+            "items": [
+                {"id": ids[0], "name": "同名"},
+                {"id": ids[1], "name": "同名"},
+                {"id": ids[2], "name": "同名"},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == [
+            "180x120/同名.png",
+            "320x240/同名.png",
+            "180x120/同名 (2).png",
+        ]
+
+
+def test_zip_uses_actual_result_dimensions_after_crop(client, configured, fake_cutout):
+    body = post_cutout(client, data={"output_mode": "crop"}).json()
+    assert (body["width"], body["height"]) == (120, 80)
+
+    response = client.post(
+        "/api/zip", json={"items": [{"id": body["id"], "name": "裁切图"}]}
+    )
+    assert response.status_code == 200
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == ["120x80/裁切图.png"]
+
+
+def test_zip_puts_unreadable_file_in_unknown_folder(client):
+    file_id = "7" * 32
+    (app_module.OUTPUT_DIR / f"{file_id}.png").write_bytes(b"not a png")
+    response = client.post(
+        "/api/zip", json={"items": [{"id": file_id, "name": "坏图"}]}
+    )
+    assert response.status_code == 200
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == ["未知尺寸/坏图.png"]
+        assert archive.read("未知尺寸/坏图.png") == b"not a png"
+
+
+def test_zip_puts_decompression_bomb_in_unknown_folder(client):
+    file_id = "8" * 32
+    (app_module.OUTPUT_DIR / f"{file_id}.png").write_bytes(
+        png_header_only(20_000, 20_000)
+    )
+    response = client.post(
+        "/api/zip", json={"items": [{"id": file_id, "name": "超大图"}]}
+    )
+    assert response.status_code == 200
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == ["未知尺寸/超大图.png"]
 
 
 def test_zip_rejects_invalid_ids(client, configured):
