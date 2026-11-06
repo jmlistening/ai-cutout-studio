@@ -1,9 +1,9 @@
 <div align="center">
 
-<h1>✂️ Cutout Studio · 抠图台</h1>
-<h3>本地优先的 AI 抠图工作台：批量、可控、可追溯。</h3>
+<h1>✂️ Cutout Studio · Background Removal Workbench</h1>
+<h3>A local-first AI background-removal workbench: batch-ready, controllable and traceable.</h3>
 <p><strong>A local-first AI background-removal workbench powered by Volcengine AI MediaKit.</strong></p>
-<p>拖入图片，得到真正的 alpha 通道透明 PNG；凭证和结果留在本机，图片会发送到火山引擎 AI MediaKit 处理。</p>
+<p>Drag in an image and get a true alpha-channel transparent PNG; credentials and results stay on your machine, while images are sent to Volcengine AI MediaKit for processing.</p>
 
 <p>
 <img alt="Python 3.10–3.13" src="https://img.shields.io/badge/Python-3.10%E2%80%933.13-3776AB?logo=python&logoColor=white">
@@ -14,198 +14,209 @@
 <img alt="MIT License" src="https://img.shields.io/badge/License-MIT-2EA44F">
 </p>
 
+<p><a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a></p>
+
+<p><strong><a href="docs/images/demo.gif">▶ Watch the demo GIF</a></strong></p>
+
+
 </div>
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="Animated demo: import a synthetic asset, compare the source with the transparent cutout and switch views" width="100%">
+</p>
+
+<p align="center"><sub>Animated demo: import a synthetic asset → start the cutout → drag the comparison slider → view the transparent PNG result.</sub></p>
 
 ---
 
-**[项目概览](#-项目概览)** · **[功能一览](#-功能一览)** · **[系统架构](#-系统架构)** · **[工程难点](#-工程难点与解决方案)** · **[安全模型](#-安全与隐私模型)** · **[快速开始](#-快速开始)** · **[测试与 CI](#-测试与持续集成)** · **[工程设计](docs/ENGINEERING.md)** · **[更新记录](CHANGELOG.md)** · **[安全策略](SECURITY.md)**
+**[Project Overview](#-project-overview)** · **[Features](#-feature-overview)** · **[Architecture](#-system-architecture)** · **[Engineering Challenges](#-engineering-challenges-and-solutions)** · **[Security Model](#-security-and-privacy-model)** · **[Quick Start](#-quick-start)** · **[Tests & CI](#-tests-and-continuous-integration)** · **[Engineering Design](docs/ENGINEERING.md)** · **[Changelog](CHANGELOG.md)** · **[Security Policy](SECURITY.md)**
 
 > **English TL;DR** — Cutout Studio is a local-first web workbench for AI background removal, built with FastAPI and the Volcengine AI MediaKit `remove-image-background` API. It covers the full media pipeline: input validation and normalization, presigned uploads, synchronous segmentation, alpha-PNG post-processing, a serial batch queue, a comparison slider and resolution-grouped ZIP export. Images are uploaded to Volcengine AI MediaKit for processing; the API key never reaches the browser, the server binds to `127.0.0.1`, rejects cross-origin writes and sanitizes every user-controlled filename. 58 pytest tests cover the HTTP API, image pipeline, upstream error mapping and the frontend/HTML contract. MIT licensed.
 
-## ✨ 项目概览
+## ✨ Project Overview
 
-豆包 App 里的「AI 抠图」是一个消费级功能，并没有单独的公开开发者 API。公开可调的抠图能力在**火山引擎 AI MediaKit**——本项目用的就是它的「图像背景移除（智能抠图）」接口，并把一次云端调用包装成一套完整的本地工作台：
+"AI Cutout" in the Doubao app is a consumer feature and has no separate public developer API. The publicly callable background-removal capability lives in **Volcengine AI MediaKit** — this project uses its "image background removal (smart cutout)" API and wraps a single cloud call into a complete local workbench:
 
-**拖入图片 → 本地校验与归一化 → 预签名上传 → 同步抠图 → alpha PNG 后处理 → 预览 / 批量 / 打包下载**。
+**Drag in an image → local validation and normalization → presigned upload → synchronous cutout → alpha-PNG post-processing → preview / batch / packaged download**.
 
-它解决的不是“能不能抠”，而是“批量处理时能不能放心用”：
+What it addresses is not "can the background be removed at all" but "can it be trusted for batch processing":
 
-- **真透明，不是近似图**：结果保留 alpha 通道，支持“保留原图尺寸”和“只保留主体”两种输出。
-- **本地优先**：服务只监听 `127.0.0.1`；API Key 只写进本机 `.env`（或由进程环境变量提供），浏览器永远拿不到完整 Key；抠图时图片会发送到火山引擎 AI MediaKit 处理。
-- **面向真实批量**：最多 50 张队列、逐张串行处理、单张重试、`↑` / `↓` 顺序切换素材、完成后按分辨率分文件夹打包。
-- **可解释的失败**：把上游的鉴权、未开通、欠费、限流、尺寸超限等错误映射成明确的中文提示，并保留 `request_id` / `task_id` 便于排查。
-- **零构建前端**：原生 HTML/CSS/JS，无 npm、无框架、无 CDN 依赖，启动即用。
-- **工程可验证**：pytest + GitHub Actions 多版本矩阵 + MIT License。
+- **True transparency, not an approximation**: results keep the alpha channel and support two output scopes: "keep original size" and "subject only".
+- **Local-first**: the service listens only on `127.0.0.1`; the API Key is written only to the local `.env` (or supplied through process environment variables), and the browser never receives the full key; images are sent to Volcengine AI MediaKit for processing.
+- **Built for real batches**: a queue of up to 50 images, one-by-one serial processing, per-image retry, `↑` / `↓` to switch assets in order, and resolution-grouped packaging when finished.
+- **Explainable failures**: upstream errors such as authentication failure, service not activated, insufficient balance, rate limiting and size limits are mapped to clear Chinese-language messages, with `request_id` / `task_id` preserved for troubleshooting.
+- **Zero-build frontend**: vanilla HTML/CSS/JS with no npm, no framework and no CDN dependencies; start it and use it.
+- **Verifiable engineering**: pytest + a GitHub Actions multi-version matrix + the MIT License.
 
-### 为什么不是“豆包 API”？
+### Why not the "Doubao API"?
 
-这是一个常见的误解。豆包 App 的抠图是产品内功能；开发者可调用的是火山引擎的媒体处理能力。AI MediaKit 的抠图接口按成功处理次数计费（官方计费页当前约 **1.38 元/千次**，即约 **0.00138 元/张**，以控制台账单为准），本项目在 README 和界面里都明确标注了这一点，不做“免费无限抠图”的暗示。
+This is a common misconception. Background removal in the Doubao app is an in-product feature; what developers can call is Volcengine's media processing capability. AI MediaKit's cutout API bills per successful processing run (the official pricing page currently lists about **CNY 1.38 per thousand calls**, i.e. about **CNY 0.00138 per image**; the console's billing record is authoritative). This project states this clearly in both the README and the UI, and never implies "free, unlimited background removal".
 
-## 📸 界面截图
+## 📸 UI Screenshots
 
-> 截图取自项目在 Windows 本地运行的真实界面。演示素材是**程序生成的合成图片**（`docs/images/demo-*.png`），凭证掩码为演示用假值（`demo-k…7890`），不包含任何个人照片或真实 Key。
+> Screenshots are taken from the real UI running locally on Windows. The demo assets are **programmatically generated synthetic images** (`docs/images/demo-*.png`), and credential masks are fake demo values (`demo-k…7890`); they contain no personal photos or real keys.
 
 <p align="center">
-  <img src="docs/images/ui-compare.png" alt="抠图台：原图与透明 PNG 的拖动对比界面" width="100%">
+  <img src="docs/images/ui-compare.png" alt="Cutout Studio: draggable comparison between the source image and the transparent PNG" width="100%">
 </p>
 
-<p align="center"><sub>拖动中线对比原图与抠图结果；右侧可切换场景、输出范围、文件名和批量下载。</sub></p>
+<p align="center"><sub>Drag the center line to compare the source image with the cutout result; the right panel switches scene, output scope and file name, and offers batch download.</sub></p>
 
-| 批量队列：3 张已完成 | 透明结果：棋盘格预览 |
+| Batch queue: 3 completed | Transparent result: checkerboard preview |
 | :---: | :---: |
-| <img src="docs/images/ui-batch.png" alt="批量抠图完成后的素材队列界面" width="100%"> | <img src="docs/images/ui-result.png" alt="透明 PNG 结果预览界面" width="100%"> |
+| <img src="docs/images/ui-batch.png" alt="Asset queue after batch cutout completes" width="100%"> | <img src="docs/images/ui-result.png" alt="Transparent PNG result preview" width="100%"> |
 
 <details>
-<summary><b>展开查看：空状态与凭证设置</b></summary>
+<summary><b>Expand to view: empty state and credential settings</b></summary>
 
 <br>
 
-| 空状态 | 凭证设置（Key 已掩码） |
+| Empty state | Credential settings (key masked) |
 | :---: | :---: |
-| <img src="docs/images/ui-overview.png" alt="抠图台空状态界面" width="100%"> | <img src="docs/images/ui-settings.png" alt="凭证设置弹窗，Key 已掩码" width="100%"> |
+| <img src="docs/images/ui-overview.png" alt="Cutout Studio empty state" width="100%"> | <img src="docs/images/ui-settings.png" alt="Credential settings dialog with the key masked" width="100%"> |
 
 </details>
 
-## 🚀 功能一览
+## 🚀 Feature Overview
 
-| 功能模块 | 具体能力 | 工程处理 |
+| Feature | Capabilities | Engineering approach |
 | --- | --- | --- |
-| **素材导入** | 拖拽、点击选择、`Ctrl+V` 粘贴；JPG / PNG / BMP / WebP / GIF；单张 ≤ 30 MB；队列上限 50 张 | 前端先做类型、体积和数量校验，后端再次独立校验，不信任客户端 |
-| **上传前归一化** | EXIF 方向校正、GIF 取首帧、透明通道识别、按场景限制缩放 | 长边/短边/总像素三重约束；LANCZOS 等比缩放；必要时迭代重压缩到 ≤ 28 MB |
-| **智能抠图** | 通用 / 人像 / 商品三种场景；保留原图尺寸或只保留主体 | 四步调用链：申请上传地址 → 预签名 PUT → 同步抠图 → 下载结果 |
-| **结果后处理** | 统一 RGBA PNG；按 alpha 边界裁掉透明边 | 通用场景的“只保留主体”由本地 `alpha.getbbox()` 兜底，不依赖上游参数 |
-| **预览对比** | 原图 / 抠图 / 对比三视图；鼠标拖动 + 键盘方向键控制对比线 | 双层叠放 + `clip-path`，指针事件与键盘事件共用同一套位置状态 |
-| **批量处理** | 全部抠图、逐张进度、失败单张重试、清空已完成；`↑` / `↓` 按队列顺序循环切换素材 | 串行处理，降低上游限流风险；每张独立更新状态，不阻塞其他素材；输入框、单选按钮、对比滑块与凭证弹窗保留原生方向键 |
-| **文件命名** | 选中即可改名；单张下载与 ZIP 都用自定义名 | 过滤路径分隔符、控制字符、Unicode 方向控制符、Windows 保留名；长度截断到 80 |
-| **导出** | 单张 PNG；ZIP 打包最多 100 张 / 500 MB | 按成品 PNG 实际分辨率分文件夹（如 `1920x1080/`）；同一文件夹内文件名大小写不敏感去重，冲突自动追加 `(2)` |
-| **凭证管理** | 网页内保存 Key，无需重启；状态与掩码实时显示 | `.env.tmp` + `os.replace` 原子写入；保存后清除进程环境变量覆盖 |
-| **本地安全** | 仅监听 `127.0.0.1`；拒绝跨站写请求；安全响应头 | Origin 校验 + 自定义请求头 + 文件 ID 正则 + `Content-Length` 上限 |
+| **Asset import** | Drag and drop, click to select, `Ctrl+V` paste; JPG / PNG / BMP / WebP / GIF; ≤ 30 MB per image; queue limit 50 | The frontend validates type, size and count first; the backend validates independently again and never trusts the client |
+| **Pre-upload normalization** | EXIF orientation correction, first frame for GIFs, alpha-channel detection, scene-based scaling limits | Three constraints: long edge / short edge / total pixels; proportional LANCZOS scaling; iterative recompression down to ≤ 28 MB when needed |
+| **Smart cutout** | Three scenes: general / portrait / product; keep the original size or subject only | Four-step call chain: request upload URL → presigned PUT → synchronous cutout → download result |
+| **Result post-processing** | Uniform RGBA PNG; transparent borders cropped along the alpha boundary | For the general scene, "subject only" falls back to local `alpha.getbbox()`, independent of upstream parameters |
+| **Preview comparison** | Source / cutout / comparison views; mouse drag + keyboard arrow keys control the divider | Two stacked layers + `clip-path`; pointer events and keyboard events share the same position state |
+| **Batch processing** | Cut out all, per-image progress, retry a single failure, clear completed; `↑` / `↓` cycle through the queue in order | Serial processing reduces upstream rate-limit risk; each image updates independently without blocking the others; inputs, radio buttons, the comparison slider and the credential dialog keep native arrow-key behavior |
+| **File naming** | Rename on selection; custom names are used for both single downloads and ZIP | Filters path separators, control characters, Unicode directional controls and Windows reserved names; truncates to 80 characters |
+| **Export** | Single PNG; ZIP up to 100 images / 500 MB | Groups by the actual resolution of the finished PNG (e.g. `1920x1080/`); case-insensitive de-duplication within the same folder, with conflicts getting `(2)` appended |
+| **Credential management** | Save the key in the web UI without restarting; live status and mask | Atomic write via `.env.tmp` + `os.replace`; process environment overrides are cleared after saving |
+| **Local security** | Binds to `127.0.0.1` only; rejects cross-site writes; security response headers | Origin validation + custom request header + file ID regex + `Content-Length` limit |
 
-### 核心技术栈
+### Core Tech Stack
 
-| 层次 | 技术 | 承担职责 |
+| Layer | Technology | Responsibility |
 | --- | --- | --- |
-| Web 服务 | **FastAPI + Uvicorn** | 本地 API、静态页面、异常处理、线程池调度 |
-| 上游调用 | **httpx.AsyncClient** | 四步 MediaKit 链路、超时控制、错误分类 |
-| 图像处理 | **Pillow** | 解码、EXIF、缩放、编码、alpha 裁剪 |
-| 前端 | **原生 HTML / CSS / JavaScript** | 队列状态机、拖拽上传、对比滑块、ZIP 下载 |
-| 测试 | **pytest + httpx.MockTransport** | 全链路 mock，不依赖真实 Key 与外网 |
-| CI | **GitHub Actions** | Ubuntu / Windows × Python 3.10–3.13 矩阵 |
+| Web service | **FastAPI + Uvicorn** | Local API, static pages, exception handling, thread-pool scheduling |
+| Upstream calls | **httpx.AsyncClient** | Four-step MediaKit chain, timeout control, error classification |
+| Image processing | **Pillow** | Decoding, EXIF, resizing, encoding, alpha cropping |
+| Frontend | **Vanilla HTML / CSS / JavaScript** | Queue state machine, drag-and-drop upload, comparison slider, ZIP download |
+| Tests | **pytest + httpx.MockTransport** | Full-chain mocks with no real key or network access required |
+| CI | **GitHub Actions** | Ubuntu / Windows × Python 3.10–3.13 matrix |
 
-## 🧭 系统架构
+## 🧭 System Architecture
 
-项目刻意保持**单进程、无数据库、零构建**：图片是短生命周期产物，用文件系统保存即可；没有账号体系，也就不需要会话与迁移。
+The project deliberately stays **single-process, database-free and build-free**: images are short-lived artifacts that the filesystem can hold; there is no account system, so no sessions or migrations are needed.
 
 ```mermaid
 flowchart LR
-    B["浏览器<br/>拖拽 / 粘贴 / 队列"] -->|multipart| A["FastAPI<br/>app.py"]
-    A -->|CPU 密集操作| T["线程池<br/>run_in_threadpool"]
-    T --> U["image_utils<br/>校验 · EXIF · 缩放 · 编码"]
-    A --> C["mediakit_client<br/>四步调用链"]
-    C -->|1 申请上传地址| M["火山引擎<br/>AI MediaKit"]
-    C -->|2 PUT 预签名地址| S["对象存储"]
-    C -->|3 智能抠图| M
-    C -->|4 下载结果| S
-    A -->|alpha 归一化| O["outputs/*.png"]
-    A -->|JSON 元数据| B
+    B["Browser<br/>drag / paste / queue"] -->|multipart| A["FastAPI<br/>app.py"]
+    A -->|CPU-intensive work| T["Thread pool<br/>run_in_threadpool"]
+    T --> U["image_utils<br/>validate · EXIF · resize · encode"]
+    A --> C["mediakit_client<br/>four-step call chain"]
+    C -->|1 request upload URL| M["Volcengine<br/>AI MediaKit"]
+    C -->|2 PUT to presigned URL| S["Object storage"]
+    C -->|3 smart cutout| M
+    C -->|4 download result| S
+    A -->|alpha normalization| O["outputs/*.png"]
+    A -->|JSON metadata| B
 ```
 
-**一次抠图请求的完整时序：**
+**Full sequence of a cutout request:**
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant B as 浏览器
+    participant B as Browser
     participant A as FastAPI
     participant M as AI MediaKit
-    participant S as 对象存储
+    participant S as Object storage
 
-    B->>A: POST /api/cutout（file, scene, output_mode, name）
-    A->>A: 校验 Key / 场景 / 体积
-    A->>A: 解码、EXIF、场景限缩、编码
+    B->>A: POST /api/cutout (file, scene, output_mode, name)
+    A->>A: Validate key / scene / size
+    A->>A: Decode, EXIF, scene-based resize, encode
     A->>M: request-media-upload-url
     M-->>A: file_id + upload_url + upload_headers
-    A->>S: PUT 图片（带预签名 headers）
+    A->>S: PUT image (with presigned headers)
     A->>M: remove-image-background
     M-->>A: image_url + request_id + task_id
     A->>S: GET image_url
-    S-->>A: 结果图片
-    A->>A: 转 RGBA、按需 alpha 裁剪、写入 outputs
+    S-->>A: result image
+    A->>A: Convert to RGBA, optional alpha crop, write to outputs
     A-->>B: {id, url, width, height, request_id, elapsed}
 ```
 
-### 项目结构
+### Project Structure
 
 ```text
 ai-cutout-studio/
-├── app.py                      # FastAPI 应用、路由、中间件、异常映射
-├── config.py                   # .env 解析、Key 掩码、原子保存
-├── image_utils.py              # 输入校验、EXIF、缩放、编码、alpha 裁剪
-├── mediakit_client.py          # MediaKit 四步调用与错误分类
+├── app.py                      # FastAPI app, routes, middleware, exception mapping
+├── config.py                   # .env parsing, key masking, atomic saving
+├── image_utils.py              # input validation, EXIF, resizing, encoding, alpha cropping
+├── mediakit_client.py          # MediaKit four-step calls and error classification
 ├── static/
-│   ├── index.html              # 工作台结构
-│   ├── app.js                  # 队列状态机、上传、对比滑块、导出
-│   └── style.css               # 纸张 / 裁切台视觉系统
-├── tests/                      # 58 个 pytest 测试
-│   ├── test_api.py             # HTTP 路由与安全边界
-│   ├── test_mediakit.py        # MockTransport 全链路
-│   ├── test_image_utils.py     # 图像归一化边界
-│   ├── test_config.py          # .env 编码与优先级
-│   └── test_frontend_static.py # 前端 / HTML 契约测试
+│   ├── index.html              # workbench structure
+│   ├── app.js                  # queue state machine, uploads, comparison slider, export
+│   └── style.css               # paper / cutting-table visual system
+├── tests/                      # 58 pytest tests
+│   ├── test_api.py             # HTTP routes and security boundaries
+│   ├── test_mediakit.py        # MockTransport full chain
+│   ├── test_image_utils.py     # image normalization edge cases
+│   ├── test_config.py          # .env encoding and precedence
+│   └── test_frontend_static.py # frontend / HTML contract tests
 ├── docs/
-│   ├── ENGINEERING.md          # 更完整的工程设计说明
-│   └── images/                 # 真实运行截图 + 合成演示素材
-├── .github/workflows/ci.yml    # 多平台 / 多版本测试
+│   ├── ENGINEERING.md          # fuller engineering design notes
+│   └── images/                 # real screenshots + synthetic demo assets
+├── .github/workflows/ci.yml    # multi-platform / multi-version tests
 ├── requirements.txt
 ├── requirements-dev.txt
-├── 启动.bat                     # Windows 一键启动
+├── 启动.bat                     # Windows one-click launcher
 ├── CHANGELOG.md
 ├── SECURITY.md
 └── LICENSE
 ```
 
-## 🧠 工程难点与解决方案
+## 🧠 Engineering Challenges and Solutions
 
-以下内容只描述**当前代码已经实现并经过测试**的处理，不把规划包装成成果。
+The following describes only behavior that **is already implemented and tested in the current code**; plans are not presented as results.
 
-### 01 · 四步上传链路：为什么不能直接 POST 图片？
+### 01 · Four-Step Upload Chain: Why Can't We POST the Image Directly?
 
-MediaKit 的抠图接口不接受直接上传的文件流，而是要求：
+MediaKit's cutout API does not accept a directly uploaded file stream. It requires:
 
-1. `POST /api/v1/tools-sync/request-media-upload-url` 申请预签名上传地址；
-2. 按返回的 `upload_headers` 把图片 `PUT` 到对象存储；
-3. `POST /api/v1/tools-sync/remove-image-background`，用 `file_id` 触发抠图；
-4. 立即 `GET result.image_url` 下载结果（官方地址 24 小时有效）。
+1. `POST /api/v1/tools-sync/request-media-upload-url` to request a presigned upload URL;
+2. `PUT` the image to object storage using the returned `upload_headers`;
+3. `POST /api/v1/tools-sync/remove-image-background` with the `file_id` to trigger the cutout;
+4. Immediately `GET result.image_url` to download the result (the official URL is valid for 24 hours).
 
-**处理方式：** `mediakit_client.py` 没有引入官方 SDK，而是用 `httpx.AsyncClient` 实现完整链路，原因是：
+**Approach:** `mediakit_client.py` does not use the official SDK; it implements the full chain with `httpx.AsyncClient`, because:
 
-- 上传响应里的 `upload_headers` 可能是对象、数组或 `"Key: Value"` 字符串；这里做了三种形态的兼容解析。
-- `file_id` 可能不带协议前缀；缺少时补成 `mediakit://...`。
-- 上传对象存储时**不能**带 MediaKit 的 `Authorization`，只带预签名头；这个边界在测试里被显式断言。
-- 每一步的超时、网络错误、HTTP 错误和业务错误都映射成不同的 `MediaKitError` code。
+- `upload_headers` in the upload response may be an object, an array or a `"Key: Value"` string; all three forms are parsed for compatibility.
+- `file_id` may lack a scheme prefix; when missing, it is completed as `mediakit://...`.
+- Uploading to object storage **must not** carry MediaKit's `Authorization` header — only the presigned headers; tests assert this boundary explicitly.
+- Timeouts, network errors, HTTP errors and business errors at every step map to distinct `MediaKitError` codes.
 
-**边界：** 同步接口意味着单张处理时间受上游影响（本项目默认超时 180 秒）。没有做异步任务队列，因为本地单用户场景下，串行 + 明确进度比引入 Redis/Celery 更可靠。
+**Boundary:** The synchronous API means per-image processing time depends on upstream (the default timeout in this project is 180 seconds). There is no asynchronous task queue, because for a local single-user scenario, serial processing with clear progress is more reliable than introducing Redis/Celery.
 
-### 02 · 上传前的图像归一化：让“能抠”变成“稳定能抠”
+### 02 · Image Normalization Before Upload: Turning "It Can Be Cut Out" into "It Reliably Is"
 
-直接把原图丢给上游，会在真实素材上频繁踩边界。上传前管线按以下顺序处理：
+Handing the original file straight to upstream frequently hits edge cases with real assets. The pre-upload pipeline processes in this order:
 
-| 阶段 | 处理 | 目的 |
+| Stage | Processing | Purpose |
 | --- | --- | --- |
-| 体积检查 | `> 30 MB` 直接拒绝 | 避免无意义的上传与内存占用 |
-| 解码保护 | 头部像素数 `> 6000 万` 拒绝 | 防止压缩炸弹在 `load()` 时吃满内存 |
-| 方向校正 | 读取 EXIF `Orientation` 并 `exif_transpose` | 手机竖拍图不会横着被抠 |
-| 动图 | `is_animated` 时取第一帧 | 避免 GIF 多帧语义不明确 |
-| 场景限缩 | 通用：长边 ≤ 10240、短边 ≤ 6000、≤ 40 MP；人像/商品：≤ 7680 × 4320 | 严格对齐上游限制 |
-| 编码选择 | 有 alpha 用 PNG；不透明图用 JPEG q92；必要时降质量到 88/84/80/76 | 在清晰度和 28 MB 上传上限之间取平衡 |
-| 兜底缩放 | 仍超限则按 0.85 迭代缩小 | 极端高熵图片也能收敛 |
-| 快速通道 | 未旋转、未缩放、格式已知、≤ 28 MB 时原样发送 | 大多数图片零重编码，节省 CPU 和时间 |
+| Size check | Reject `> 30 MB` directly | Avoid pointless uploads and memory usage |
+| Decode guard | Reject when the header pixel count is `> 60 million` | Prevent decompression bombs from exhausting memory during `load()` |
+| Orientation correction | Read EXIF `Orientation` and apply `exif_transpose` | A portrait phone photo is not cut out sideways |
+| Animated images | Take the first frame when `is_animated` | Avoid ambiguous multi-frame GIF semantics |
+| Scene-based limits | General: long edge ≤ 10240, short edge ≤ 6000, ≤ 40 MP; portrait/product: ≤ 7680 × 4320 | Strictly match upstream limits |
+| Encoding choice | PNG when alpha is present; JPEG q92 for opaque images; drop quality to 88/84/80/76 when needed | Balance sharpness against the 28 MB upload limit |
+| Fallback downscaling | If still over the limit, shrink iteratively by 0.85 | Converges even for extremely high-entropy images |
+| Fast path | Send unchanged when not rotated, not resized, format known and ≤ 28 MB | Most images are not re-encoded at all, saving CPU and time |
 
-**权衡：** 这是“尽量不改变原图”与“保证上游一定收得下”之间的折中。透明 PNG 始终保留 alpha；不透明图才允许转 JPEG。
+**Trade-off:** This is a compromise between "change the original as little as possible" and "guarantee upstream accepts it". Transparent PNGs always keep alpha; only opaque images may be converted to JPEG.
 
-### 03 · 结果后处理：alpha 通道才是抠图的“真值”
+### 03 · Result Post-Processing: The Alpha Channel Is the Ground Truth of a Cutout
 
-上游返回的图片格式并不总是 RGBA PNG。`normalize_result_image()` 统一转为 RGBA，并在“只保留主体”模式下用 alpha 通道的包围盒裁剪：
+The format returned by upstream is not always an RGBA PNG. `normalize_result_image()` converts everything to RGBA and, in "subject only" mode, crops using the bounding box of the alpha channel:
 
 ```python
 bbox = img.getchannel("A").getbbox()
@@ -213,99 +224,99 @@ if bbox:
     img = img.crop(bbox)
 ```
 
-一个容易忽略的细节：**通用场景不传 `need_crop_background`**。该参数只对人像/商品生效；通用场景传了可能触发参数校验问题，所以本项目对通用场景改为本地 alpha 裁剪兜底。这样既保持上游请求干净，又保证“只保留主体”的语义一致。
+One easily overlooked detail: **the general scene does not send `need_crop_background`**. That parameter only applies to portrait/product; sending it for the general scene may trigger parameter-validation problems, so this project falls back to local alpha cropping for the general scene. This keeps upstream requests clean while preserving consistent "subject only" semantics.
 
-**边界：** 本地裁剪基于完全透明的像素边界，不做羽化或语义分割；对于半透明边缘，包围盒可能略大于视觉主体。
+**Boundary:** Local cropping is based on the boundary of fully transparent pixels and does no feathering or semantic segmentation; with semi-transparent edges, the bounding box may be slightly larger than the visible subject.
 
-### 04 · 失败可解释：把上游错误翻译成用户能行动的信息
+### 04 · Explainable Failures: Translating Upstream Errors into Actionable Information
 
-上游可能返回鉴权失败、服务未开通、欠费、限流、尺寸超限、超时等完全不同的错误。如果只把 HTTP 状态码透传给前端，用户无法判断该改 Key、去充值，还是换一张图。
+Upstream may return entirely different errors: authentication failure, service not activated, insufficient balance, rate limiting, size limits, timeouts. Passing only the HTTP status code through to the frontend leaves users unable to tell whether they should change the key, top up the account, or pick another image.
 
-`mediakit_client._error_from_payload()` 会同时检查 `error.code`、`error.message` 和 HTTP 状态码，做关键词分类；`app.py` 再把业务 code 映射为对外的 HTTP 状态：
+`mediakit_client._error_from_payload()` inspects `error.code`, `error.message` and the HTTP status code together and classifies them by keyword; `app.py` then maps the business code to an outward HTTP status:
 
-| 业务 code | 对外 HTTP | 用户看到的意思 |
+| Business code | Outward HTTP | What the user sees |
 | --- | ---: | --- |
-| `NOT_CONFIGURED` | 400 | 还没填 MediaKit API Key |
-| `MEDIAKIT_AUTH` | 401 | Key 无效或没有权限 |
-| `MEDIAKIT_PERMISSION` | 403 | 服务/图像工具未开通 |
-| `MEDIAKIT_BILLING` | 402 | 余额或免费额度不足 |
-| `MEDIAKIT_RATE_LIMIT` | 429 | 请求太频繁，稍后再试 |
-| `MEDIAKIT_BAD_IMAGE` | 422 | 图片尺寸或体积超限 |
-| `MEDIAKIT_TIMEOUT` | 504 | 上游超时 |
-| 本地空白结果校验 | 502 | 上游返回全透明图片，结果不写入 `outputs/` |
-| 其他上游错误 | 502 | 抠图服务返回错误 |
+| `NOT_CONFIGURED` | 400 | The MediaKit API Key has not been set yet |
+| `MEDIAKIT_AUTH` | 401 | Key invalid or lacking permission |
+| `MEDIAKIT_PERMISSION` | 403 | Service / image tool not activated |
+| `MEDIAKIT_BILLING` | 402 | Insufficient balance or free quota |
+| `MEDIAKIT_RATE_LIMIT` | 429 | Too many requests; try again later |
+| `MEDIAKIT_BAD_IMAGE` | 422 | Image dimensions or size exceed the limits |
+| `MEDIAKIT_TIMEOUT` | 504 | Upstream timed out |
+| Local blank-result check | 502 | Upstream returned a fully transparent image; the result is not written to `outputs/` |
+| Other upstream errors | 502 | The cutout service returned an error |
 
-同时保留 `request_id` 与 `task_id`，在界面的“接口日志”里展示，方便对照火山引擎控制台排查。
+`request_id` and `task_id` are preserved and shown in the UI's "API log" so you can cross-check against the Volcengine console.
 
-### 05 · 本地应用也要有安全边界
+### 05 · A Local App Still Needs a Security Boundary
 
-“只在本机跑”不等于“没有攻击面”。浏览器里的任意网页都可能向 `127.0.0.1` 发请求；用户上传的文件名也可能进入 ZIP。本项目做了以下约束：
+"Runs only on this machine" does not mean "no attack surface". Any web page in the browser can send requests to `127.0.0.1`; user-supplied filenames can also end up in a ZIP. This project applies the following constraints:
 
-- **只绑定 `127.0.0.1`**：`uvicorn.run(..., host="127.0.0.1")`，不监听局域网。
-- **拒绝跨站写操作**：`POST /api/*` 如果带 `Origin`，其 hostname 必须是 `127.0.0.1` / `localhost` / `::1`。
-- **自定义请求头**：`/api/cutout` 要求 `X-Cutout-Client: 1`，提高跨站表单伪造的成本。
-- **文件 ID 白名单**：结果文件只接受 32 位小写十六进制 ID，`/files/../../win.ini` 之类请求在正则层就被拒绝。
-- **文件名清洗**：去掉路径分隔符、控制字符、Unicode 方向控制符；处理 Windows 保留名（`CON`、`PRN`、`COM1` 等）；截断到 80 字符。
-- **ZIP 去重**：同一分辨率文件夹内大小写不敏感比较，冲突时追加 `(2)`，避免覆盖；文件夹名只由图片实际宽高生成。
-- **解码保护**：先看头部像素数，再 `load()`，防止超大图占满内存。
-- **响应头**：`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options: DENY`。
+- **Binds to `127.0.0.1` only**: `uvicorn.run(..., host="127.0.0.1")`; it does not listen on the LAN.
+- **Rejects cross-site writes**: for `POST /api/*` requests that carry an `Origin`, its hostname must be `127.0.0.1` / `localhost` / `::1`.
+- **Custom request header**: `/api/cutout` requires `X-Cutout-Client: 1`, raising the cost of cross-site form forgery.
+- **File ID allowlist**: result files accept only 32-character lowercase hexadecimal IDs; requests such as `/files/../../win.ini` are rejected at the regex layer.
+- **Filename sanitization**: strips path separators, control characters and Unicode directional controls; handles Windows reserved names (`CON`, `PRN`, `COM1`, etc.); truncates to 80 characters.
+- **ZIP de-duplication**: case-insensitive comparison within the same resolution folder; conflicts get `(2)` appended to avoid overwrites; folder names are generated only from the image's actual width and height.
+- **Decode guard**: check the header pixel count before `load()` to keep oversized images from exhausting memory.
+- **Response headers**: `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`.
 
-更完整的威胁模型与报告方式见 [SECURITY.md](SECURITY.md)。
+For the fuller threat model and how to report issues, see [SECURITY.md](SECURITY.md).
 
-### 06 · 前端：没有框架，但有一个明确的状态机
+### 06 · Frontend: No Framework, but a Clear State Machine
 
-`static/app.js` 用约 1,100 行原生 JavaScript 管理：
+`static/app.js` uses about 1,100 lines of vanilla JavaScript to manage:
 
-- 素材状态：`pending → processing → done / error`，失败项可单独重试；
-- 批量模式：串行处理，按钮实时显示 `正在处理 n/N`，不会并发打爆上游；
-- 对比滑块：Pointer Events + 键盘方向键共用同一套 `comparePos` 状态；
-- Blob URL 生命周期：移除素材、清空队列、页面卸载时调用 `revokeObjectURL`，避免内存泄漏；
-- 参数持久化：只把 `scene` / `scope` 存进 `localStorage`，不存图片、不存 Key。
+- Asset state: `pending → processing → done / error`; failed items can be retried individually;
+- Batch mode: serial processing; the button shows `Processing n/N` live and never hammers upstream concurrently;
+- Comparison slider: Pointer Events + keyboard arrow keys share the same `comparePos` state;
+- Blob URL lifecycle: `revokeObjectURL` is called when an asset is removed, the queue is cleared or the page unloads, avoiding memory leaks;
+- Parameter persistence: only `scene` / `scope` go into `localStorage`; no images and no key.
 
-**权衡：** 没有引入 React/Vue，是因为这个界面只有一个页面、一个队列和三种视图；零构建带来的启动速度和依赖可控性，比组件化收益更大。
+**Trade-off:** No React/Vue was introduced because this UI has one page, one queue and three views; the startup speed and dependency control of a zero-build setup outweigh the benefits of componentization.
 
-## 🔒 安全与隐私模型
+## 🔒 Security and Privacy Model
 
-| 资产 / 威胁 | 处理方式 |
+| Asset / Threat | Handling |
 | --- | --- |
-| MediaKit API Key | 只保存在本机 `.env`（也可用环境变量覆盖）；后端返回给浏览器的只有掩码（如 `demo-k…7890`） |
-| 图片上传 | 抠图必须联网；图片会经本机后端发送到火山引擎 AI MediaKit，本机只保留你选择的原文件和 `outputs/` 结果 |
-| 浏览器窃取 Key | 没有任何接口返回完整 Key；设置接口只接受写入，不回读 |
-| 恶意网页跨站调用 | 仅监听 `127.0.0.1`；Origin 白名单；`X-Cutout-Client` 自定义头 |
-| 路径穿越 | 结果 ID 必须是 32 位十六进制；ZIP 只允许已存在的输出文件 |
-| 恶意文件名 | 过滤非法字符、控制字符、双向文本控制符；Windows 保留名加前缀 |
-| 压缩炸弹 | 解码前检查像素数；Pillow `MAX_IMAGE_PIXELS` 双重保护 |
-| 上游超大响应 | 结果下载上限 80 MB；ZIP 上限 500 MB / 100 张 |
-| 截图 / 仓库泄漏 | README 截图使用合成演示图与假掩码；`.env` 被 `.gitignore` 排除 |
+| MediaKit API Key | Stored only in the local `.env` (environment variables can also override it); the backend returns only the mask to the browser (e.g. `demo-k…7890`) |
+| Image upload | Cutout requires network access; images are sent from the local backend to Volcengine AI MediaKit, and locally only your chosen source files and the `outputs/` results remain |
+| Browser key theft | No endpoint returns the full key; the settings endpoint only accepts writes and never reads back |
+| Malicious cross-site calls | Listens on `127.0.0.1` only; Origin allowlist; `X-Cutout-Client` custom header |
+| Path traversal | Result IDs must be 32-character hexadecimal; ZIP only accepts existing output files |
+| Malicious filenames | Filters illegal characters, control characters and bidirectional text controls; Windows reserved names get a prefix |
+| Decompression bombs | Pixel count checked before decoding; Pillow `MAX_IMAGE_PIXELS` as a second layer of protection |
+| Oversized upstream responses | Result download limit 80 MB; ZIP limit 500 MB / 100 images |
+| Screenshot / repository leaks | README screenshots use synthetic demo images and fake masks; `.env` is excluded by `.gitignore` |
 
-**明确不在威胁模型内：** 多用户部署、公网暴露、企业级权限审计、恶意本机用户。如果你要把服务放到局域网或公网，请在前面加认证与反向代理，并重新评估 CSRF、限流和日志策略。
+**Explicitly outside the threat model:** multi-user deployment, public internet exposure, enterprise-grade permission auditing, malicious local users. If you want to run the service on a LAN or the public internet, put authentication and a reverse proxy in front of it, and re-evaluate CSRF, rate limiting and logging.
 
-## 🔌 API 接口
+## 🔌 API Reference
 
-| 方法 | 路径 | 说明 |
+| Method | Path | Description |
 | --- | --- | --- |
-| `GET` | `/` | 工作台页面 |
-| `GET` | `/api/health` | 健康检查，返回版本号 |
-| `GET` | `/api/status` | 凭证状态、掩码 Key、端点、场景限制 |
-| `POST` | `/api/settings` | 保存 MediaKit API Key（原子写入 `.env`） |
-| `POST` | `/api/cutout` | 上传并抠图：`file`、`scene`、`output_mode`、`name` |
-| `GET` | `/files/{id}` | 预览结果；`?download=1&name=...` 触发下载 |
-| `POST` | `/api/zip` | 按 `[{id, name}]` 打包已完成结果，并按实际分辨率分文件夹 |
+| `GET` | `/` | Workbench page |
+| `GET` | `/api/health` | Health check; returns the version number |
+| `GET` | `/api/status` | Credential status, masked key, endpoint, scene limits |
+| `POST` | `/api/settings` | Save the MediaKit API Key (atomic write to `.env`) |
+| `POST` | `/api/cutout` | Upload and cut out: `file`, `scene`, `output_mode`, `name` |
+| `GET` | `/files/{id}` | Preview a result; `?download=1&name=...` triggers a download |
+| `POST` | `/api/zip` | Package completed results from `[{id, name}]`, grouped into folders by actual resolution |
 
-`POST /api/cutout` 成功时返回：
+`POST /api/cutout` returns on success:
 
 ```json
 {
-  "id": "32 位十六进制结果 ID",
+  "id": "32-character hexadecimal result ID",
   "url": "/files/<id>",
-  "name": "自定义文件名",
+  "name": "custom file name",
   "width": 1200,
   "height": 900,
   "size": 27392,
   "scene": "product",
   "mode": "original",
-  "request_id": "上游请求 ID",
-  "task_id": "上游任务 ID",
+  "request_id": "upstream request ID",
+  "task_id": "upstream task ID",
   "elapsed": 3.95,
   "input": {
     "width": 1200,
@@ -318,15 +329,15 @@ if bbox:
 }
 ```
 
-## ⚡ 快速开始
+## ⚡ Quick Start
 
-> 需要 Python **3.10 或更高版本**。所有命令都在项目根目录执行。
+> Requires Python **3.10 or later**. Run all commands from the project root.
 
-**Windows · 一键启动（推荐）**
+**Windows · One-click launch (recommended)**
 
-双击 `启动.bat`。首次运行会自动创建 `.venv`、安装依赖；之后直接启动。浏览器会自动打开 `http://127.0.0.1:8765`，端口被占用时自动在 8765–8794 之间寻找空闲端口。
+Double-click `启动.bat`. On first run it creates `.venv` and installs dependencies automatically; later runs start directly. The browser opens `http://127.0.0.1:8765` automatically, and if the port is busy it picks a free one between 8765 and 8794.
 
-**手动启动**
+**Manual start**
 
 ```bash
 python -m venv .venv
@@ -339,96 +350,96 @@ python -m venv .venv
 ./.venv/bin/python app.py
 ```
 
-**配置 Key**
+**Configure the key**
 
-1. 登录[火山引擎控制台](https://console.volcengine.com/)，搜索并开通 **AI MediaKit**；
-2. 打开 [AI MediaKit API Key 页面](https://console.volcengine.com/imp/ai-mediakit/settings) 创建 Key；
-3. 在页面右上角「凭证设置」粘贴保存，或复制 `.env.example` 为 `.env` 后填写：
+1. Sign in to the [Volcengine console](https://console.volcengine.com/) and search for and activate **AI MediaKit**;
+2. Open the [AI MediaKit API Key page](https://console.volcengine.com/imp/ai-mediakit/settings) and create a key;
+3. Paste and save it under "Credential Settings" in the top-right corner of the page, or copy `.env.example` to `.env` and fill it in:
 
 ```dotenv
-MEDIAKIT_API_KEY=你的_AI_MediaKit_API_Key
+MEDIAKIT_API_KEY=your_AI_MediaKit_API_Key
 MEDIAKIT_ENDPOINT=https://mediakit.cn-beijing.volces.com
 ```
 
-> 注意：这里需要的是 **AI MediaKit API Key**，不是火山方舟 ARK Key，也不是 AK/SK。计费和开通状态以控制台为准。
+> Note: you need an **AI MediaKit API Key** here — not a Volcengine Ark (ARK) key, and not AK/SK. Billing and activation status are governed by the console.
 
-**使用流程**
+**Usage flow**
 
-1. 拖入图片，或点击上传 / `Ctrl+V` 粘贴；
-2. 选择场景（通用 / 人像 / 商品）和输出范围；
-3. 点「开始抠图」或「全部抠图」；
-4. 拖动中线对比原图与结果，切换「对比 / 抠图 / 原图」；按 `↑` / `↓` 切换队列中的图片（含已完成）；
-5. 「下载 PNG」导出单张，「打包下载已完成的图片」导出按分辨率分文件夹的 ZIP。
+1. Drag in images, or click upload / paste with `Ctrl+V`;
+2. Choose a scene (general / portrait / product) and the output scope;
+3. Click "Start cutout" or "Cut out all";
+4. Drag the center line to compare the source with the result; switch between "Comparison / Cutout / Source"; press `↑` / `↓` to move through the images in the queue (including completed ones);
+5. "Download PNG" exports a single image; "Download completed as ZIP" exports a ZIP grouped into folders by resolution.
 
-结果同时保存在本机 `outputs/`；清空队列不会删除已经生成的文件。
+Results are also saved locally under `outputs/`; clearing the queue does not delete files that have already been generated.
 
-### 配置项
+### Configuration
 
-| 环境变量 | 默认值 | 说明 |
+| Environment variable | Default | Description |
 | --- | --- | --- |
-| `MEDIAKIT_API_KEY` | 空 | AI MediaKit API Key；环境变量优先于 `.env` |
-| `MEDIAKIT_ENDPOINT` | `https://mediakit.cn-beijing.volces.com` | API 端点 |
-| `MEDIAKIT_TIMEOUT` | `180` | 单次上游调用超时（秒），连接超时固定 20 秒 |
-| `PORT` | `8765` | 起始端口；被占用时自动向后寻找 |
+| `MEDIAKIT_API_KEY` | empty | AI MediaKit API Key; environment variables take precedence over `.env` |
+| `MEDIAKIT_ENDPOINT` | `https://mediakit.cn-beijing.volces.com` | API endpoint |
+| `MEDIAKIT_TIMEOUT` | `180` | Timeout per upstream call (seconds); the connect timeout is fixed at 20 seconds |
+| `PORT` | `8765` | Starting port; the next free port is used when it is busy |
 
-## ✅ 测试与持续集成
+## ✅ Tests and Continuous Integration
 
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-当前 **58 个测试全部通过**（Python 3.12.5 本地验证），覆盖：
+All **58 tests currently pass** (verified locally on Python 3.12.5), covering:
 
-- **HTTP 层**：页面、状态、凭证保存、跨站拒绝、路径穿越、ZIP 分辨率分文件夹与去重、错误状态映射；
-- **上游链路**：用 `httpx.MockTransport` 模拟申请上传地址 → PUT → 抠图 → 下载的完整四步，断言请求顺序、鉴权头和 body；
-- **图像管线**：EXIF 旋转、GIF 首帧、透明/不透明编码、场景限缩、alpha 裁剪、空白结果拒绝、垃圾数据拒绝；
-- **配置层**：UTF-8 BOM、GBK、环境变量覆盖、原子保存、Key 掩码；
-- **前端契约**：`app.js` 引用的元素 ID 必须存在于 HTML、静态资源必须存在、三种视图必须齐全、队列 `↑` / `↓` 切换逻辑存在、前端文件不得含裸控制字符。
+- **HTTP layer**: page, status, credential saving, cross-site rejection, path traversal, ZIP resolution grouping and de-duplication, error status mapping;
+- **Upstream chain**: `httpx.MockTransport` simulates the full four steps — request upload URL → PUT → cutout → download — asserting request order, auth headers and body;
+- **Image pipeline**: EXIF rotation, GIF first frame, transparent/opaque encoding, scene-based scaling limits, alpha cropping, blank-result rejection, garbage-data rejection;
+- **Config layer**: UTF-8 BOM, GBK, environment-variable overrides, atomic saving, key masking;
+- **Frontend contract**: element IDs referenced by `app.js` must exist in the HTML, static assets must exist, all three views must be present, the queue `↑` / `↓` switching logic must exist, and frontend files must not contain raw control characters.
 
-仓库附带 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，在 push 和 pull request 时对 **Ubuntu / Windows × Python 3.10–3.13** 运行测试。实际结果见 [GitHub Actions](https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml)。
+The repository includes [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which runs tests on push and pull request across **Ubuntu / Windows × Python 3.10–3.13**. See [GitHub Actions](https://github.com/jmlistening/ai-cutout-studio/actions/workflows/ci.yml) for actual results.
 
-## 🧪 可复现的演示数据
+## 🧪 Reproducible Demo Data
 
-`docs/images/demo-*.png` 是程序生成的合成素材（马克杯、人物剪影、几何玩偶），专门用于截图和本地试跑，不包含任何个人照片。你可以直接把它们拖进工作台复现 README 中的界面。
+`docs/images/demo-*.png` are programmatically generated synthetic assets (a mug, a person silhouette, a geometric doll figure), intended only for screenshots and local trial runs; they contain no personal photos. You can drag them straight into the workbench to reproduce the UI shown in this README.
 
-生成脚本没有提交到仓库——这些图片只作为静态演示资产，避免把一次性截图工具混入运行时依赖。
+The generation script is not committed to the repository — these images are static demo assets only, keeping one-off screenshot tooling out of the runtime dependencies.
 
-### 一次真实冒烟测试
+### A Real Smoke Test
 
-2026-10-24 在 Windows 11 / Python 3.12.5 上，用这 3 张合成图各调用一次真实 MediaKit 接口（约 0.004 元）：
+On 2026-10-24, on Windows 11 / Python 3.12.5, each of these 3 synthetic images was sent once to the real MediaKit API (about CNY 0.004):
 
-| 素材 | 场景 | 耗时 | 输出 |
+| Asset | Scene | Time | Output |
 | --- | --- | ---: | --- |
 | `demo-product.png` | `product` | 3.87 s | 1200 × 900 · 27.4 KB |
 | `demo-portrait.png` | `general` | 3.39 s | 1200 × 900 · 20.2 KB |
 | `demo-common.png` | `general` | 3.55 s | 1200 × 900 · 22.2 KB |
 
-> 这是单机、单次观测，不构成性能基准；延迟取决于网络、图片尺寸和上游排队情况。合成人物剪影使用 `general` 场景，真实人像素材应使用 `human` 场景。
+> This is a single-machine, single-run observation and not a performance benchmark; latency depends on the network, image size and upstream queueing. The synthetic person silhouette uses the `general` scene; real portrait photos should use the `human` scene.
 
-## ⚠️ 已知边界与取舍
+## ⚠️ Known Limitations and Trade-offs
 
-- **同步接口**：单张处理受上游延迟影响；没有异步任务队列、断点续传或后台队列。
-- **单机单用户**：没有账号体系、并发隔离和配额管理；不适合直接暴露到公网。
-- **结果只存在本机**：`outputs/` 是普通文件，不做加密、过期清理或数据库索引。
-- **必须联网且图片会上传**：抠图调用火山引擎 AI MediaKit，图片会离开本机；当前版本没有本地离线模型。
-- **只支持浏览器可预览的格式**：界面接收 JPG / PNG / BMP / WebP / GIF；MediaKit 虽支持 TIFF / HEIC，但浏览器无法可靠预览，所以没有放进上传入口。
-- **文件名清洗是有损的**：非法字符会被删除，而不是转义；极长名称会截断到 80 字符。
-- **裁剪基于 alpha 包围盒**：不做羽化、不做语义主体检测；半透明边缘可能让包围盒略大。
-- **成本与配额由上游决定**：计费、免费额度、限流策略以火山引擎控制台为准，本项目不做保证。
-- **不做自动重试**：失败后由用户手动重试；每次重试都会重新调用上游，可能重复计费。这样做是为了避免在余额不足或参数错误时产生不可控的重复扣费。
-- **空白结果会被拒绝**：上游返回全透明图片时以 502 失败返回，不写入 `outputs/`，避免把“识别失败”当成成功结果。
+- **Synchronous API**: per-image processing depends on upstream latency; there is no asynchronous task queue, resumable transfer or background queue.
+- **Single machine, single user**: no account system, concurrency isolation or quota management; not suitable for direct public exposure.
+- **Results exist only locally**: `outputs/` holds plain files, with no encryption, expiry cleanup or database index.
+- **Network required and images are uploaded**: cutout calls Volcengine AI MediaKit, so images leave your machine; the current version has no local offline model.
+- **Browser-previewable formats only**: the UI accepts JPG / PNG / BMP / WebP / GIF; although MediaKit supports TIFF / HEIC, browsers cannot preview them reliably, so they are not exposed in the upload entry point.
+- **Filename sanitization is lossy**: illegal characters are deleted rather than escaped; very long names are truncated to 80 characters.
+- **Cropping uses the alpha bounding box**: no feathering and no semantic subject detection; semi-transparent edges can make the bounding box slightly larger.
+- **Cost and quota are decided upstream**: billing, free quota and rate-limit policy are governed by the Volcengine console; this project makes no guarantees.
+- **No automatic retries**: after a failure the user retries manually; every retry calls upstream again and may be billed again. This is deliberate, to avoid uncontrolled duplicate charges when the balance is low or the parameters are wrong.
+- **Blank results are rejected**: when upstream returns a fully transparent image, the request fails with 502 and nothing is written to `outputs/`, so a "detection failure" is never presented as a successful result.
 
 ## 🗺️ Roadmap
 
-- [ ] 可选的后台任务队列（适合大批量 / 多用户场景）
-- [ ] 本地结果库：缩略图索引、按时间清理、失败重跑
-- [ ] 更多上游适配器（保持同一套本地 API）
-- [ ] 可选的 Docker 镜像与反向代理示例
-- [ ] 前端可访问性与键盘操作补全
+- [ ] Optional background task queue (for large batches / multi-user scenarios)
+- [ ] Local result library: thumbnail index, time-based cleanup, rerun failures
+- [ ] More upstream adapters (keeping the same local API)
+- [ ] Optional Docker image and reverse-proxy example
+- [ ] Frontend accessibility and full keyboard support
 
-> Roadmap 是方向，不是承诺；当前版本只保证上面“已知边界”之前的已实现能力。
+> The roadmap is a direction, not a commitment; the current version guarantees only the implemented capabilities described above, up to "Known Limitations".
 
 ## 📄 License
 
-本项目采用 [MIT License](LICENSE)。欢迎通过 Issue / Pull Request 提出改进建议。提交复现材料时请使用合成或已脱敏的图片，不要把真实 API Key、个人照片或上游返回的签名 URL 贴进 Issue。
+This project is licensed under the [MIT License](LICENSE). Suggestions and improvements are welcome via Issue / Pull Request. When submitting reproduction material, please use synthetic or redacted images, and do not paste real API keys, personal photos or signed upstream URLs into issues.
